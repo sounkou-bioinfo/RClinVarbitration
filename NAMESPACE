@@ -2,6 +2,6 @@
 
 export(rclinvarbitration_enable)
 export(rclinvarbitration_extension_path)
-export(rclinvarbitration_graph_sql)
 export(rclinvarbitration_import_xml)
 export(rclinvarbitration_init)
+export(rclinvarbitration_schema_sql)

@@ -2,17 +2,18 @@
 % Please edit documentation in R/connection.R
 \name{rclinvarbitration_extension_path}
 \alias{rclinvarbitration_extension_path}
-\title{Locate the exact-version RClinVarbitration DuckDB extension}
+\title{Locate a version-matched RClinVarbitration DuckDB extension}
 \usage{
-rclinvarbitration_extension_path(duckdb_version = "v1.5.3")
+rclinvarbitration_extension_path(duckdb_version = NULL)
 }
 \arguments{
-\item{duckdb_version}{Exact DuckDB version, with or without a \code{v} prefix.}
+\item{duckdb_version}{Exact DuckDB version, with or without a \code{v} prefix.
+\code{NULL} selects the version reported by the installed \code{duckdb} package.}
 }
 \value{
 An absolute extension path.
 }
 \description{
-The extension uses DuckDB's version-coupled C extension ABI. It is never
-loaded into a different engine release.
+The package uses DuckDB's unstable C extension ABI for its streaming table
+function, so it bundles one artifact per supported exact engine release.
 }

@@ -1,6 +1,6 @@
 # Keep this release artifact name in sync with DESCRIPTION.
 PKG = RClinVarbitration
-VER = 0.1.0
+VER = 0.1.1
 TAR = $(PKG)_$(VER).tar.gz
 
 .PHONY: rd build install rdm test check clean
@@ -14,8 +14,8 @@ build: rd
 install: build
 	R CMD INSTALL --preclean $(TAR)
 
-# Render the executable README against the just-installed package and clean its
-# transient HTML companion so it cannot enter a source release.
+# Render against the bundled unaltered NCBI record. A full multi-gigabyte VCV
+# release is an import/integration input, not a README build dependency.
 rdm: install
 	Rscript -e 'rmarkdown::render("README.Rmd", output_file = "README.md", quiet = TRUE)'
 	rm -f README.html

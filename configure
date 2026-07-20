@@ -5,15 +5,15 @@ ROOT=`CDPATH= cd -- "$(dirname -- "$0")" && pwd`
 if [ -z "${R_HOME:-}" ]; then
   R_HOME=`R RHOME`
 fi
-VERSION=`awk -F': *' '/^Version:/ {print $2; exit}' "$ROOT/DESCRIPTION"`
-DUCKDB_VERSION=v1.5.3
-HEADER_DIR="$ROOT/tools/ext/duckdb_capi/$DUCKDB_VERSION"
-SOURCE="$ROOT/tools/ext/rclinvarbitration_extension.c"
-OUT_DIR="$ROOT/inst/rclinvarbitration_extension/build/$DUCKDB_VERSION"
-RAW="$OUT_DIR/rclinvarbitration.duckdb_extension.raw"
-FINAL="$OUT_DIR/rclinvarbitration.duckdb_extension"
 
-for file in "$HEADER_DIR/duckdb.h" "$HEADER_DIR/duckdb_extension.h" "$SOURCE" "$ROOT/tools/append_extension_metadata.R"; do
+VERSION=`awk -F': *' '/^Version:/ {print $2; exit}' "$ROOT/DESCRIPTION"`
+CAPI_ROOT="$ROOT/tools/ext/duckdb_capi"
+VERSIONS_FILE="$CAPI_ROOT/versions.txt"
+SOURCE="$ROOT/tools/ext/rclinvarbitration_extension.c"
+METADATA="$ROOT/tools/append_extension_metadata.R"
+BUILD_ROOT="$ROOT/inst/rclinvarbitration_extension/build"
+
+for file in "$VERSIONS_FILE" "$SOURCE" "$METADATA"; do
   if [ ! -f "$file" ]; then
     echo "ERROR: required native extension file is missing: $file" >&2
     exit 1
@@ -25,6 +25,31 @@ if ! command -v pkg-config >/dev/null 2>&1 || ! pkg-config --exists libxml-2.0; 
   exit 1
 fi
 
+SUPPORTED=`sed -e 's/[[:space:]]*#.*$//' -e '/^[[:space:]]*$/d' "$VERSIONS_FILE"`
+BUILD_VERSIONS="${RCLINVAR_DUCKDB_VERSIONS:-$SUPPORTED}"
+if [ -z "$BUILD_VERSIONS" ]; then
+  echo "ERROR: no DuckDB versions selected" >&2
+  exit 1
+fi
+for version in $BUILD_VERSIONS; do
+  if ! printf '%s\n' "$version" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$' || \
+    ! printf '%s\n' "$SUPPORTED" | grep -Fqx "$version"; then
+    echo "ERROR: DuckDB version '$version' is not declared in $VERSIONS_FILE" >&2
+    exit 1
+  fi
+  if [ ! -f "$CAPI_ROOT/$version/duckdb.h" ] || \
+    [ ! -f "$CAPI_ROOT/$version/duckdb_extension.h" ] || \
+    [ ! -f "$CAPI_ROOT/$version/duckdb_headers.json" ]; then
+    echo "ERROR: incomplete DuckDB C API headers for $version" >&2
+    exit 1
+  fi
+  pinned=`awk -F'"' '/"duckdb_ref"/ {print $4; exit}' "$CAPI_ROOT/$version/duckdb_headers.json"`
+  if [ "$pinned" != "$version" ]; then
+    echo "ERROR: $CAPI_ROOT/$version metadata records '$pinned', expected '$version'" >&2
+    exit 1
+  fi
+done
+
 CC=`"${R_HOME}/bin/R" CMD config CC | cut -f1 -d' '`
 R_CFLAGS=`"${R_HOME}/bin/R" CMD config CFLAGS`
 R_CPICFLAGS=`"${R_HOME}/bin/R" CMD config CPICFLAGS`
@@ -34,29 +59,36 @@ XML_LIBS=`pkg-config --libs libxml-2.0`
 OS=`uname -s`
 ARCH=`uname -m`
 case "$OS/$ARCH" in
-  Linux/x86_64) PLATFORM=linux_amd64 ;;
-  Linux/aarch64|Linux/arm64) PLATFORM=linux_arm64 ;;
-  Darwin/x86_64) PLATFORM=osx_amd64 ;;
-  Darwin/arm64) PLATFORM=osx_arm64 ;;
+  Linux/x86_64) PLATFORM=linux_amd64; SHARED_FLAGS='-shared -fPIC -Wl,--exclude-libs,ALL -Wl,-Bsymbolic-functions' ;;
+  Linux/aarch64|Linux/arm64) PLATFORM=linux_arm64; SHARED_FLAGS='-shared -fPIC -Wl,--exclude-libs,ALL -Wl,-Bsymbolic-functions' ;;
+  Darwin/x86_64) PLATFORM=osx_amd64; SHARED_FLAGS='-shared -fPIC -undefined dynamic_lookup -Wl,-exported_symbol,_rclinvarbitration_init_c_api' ;;
+  Darwin/arm64) PLATFORM=osx_arm64; SHARED_FLAGS='-shared -fPIC -undefined dynamic_lookup -Wl,-exported_symbol,_rclinvarbitration_init_c_api' ;;
   *) echo "ERROR: unsupported DuckDB extension platform: $OS/$ARCH" >&2; exit 1 ;;
 esac
 
-mkdir -p "$OUT_DIR"
-rm -f "$RAW" "$FINAL"
-
+rm -rf "$BUILD_ROOT"
+mkdir -p "$BUILD_ROOT"
 CFLAGS="$R_CFLAGS $R_CPICFLAGS -O2 -fPIC -fvisibility=hidden -Wall -Wextra -Werror"
-CPPFLAGS="-DNDEBUG -DDUCKDB_EXTENSION_NAME=rclinvarbitration -DDUCKDB_EXTENSION_API_VERSION_UNSTABLE=$DUCKDB_VERSION -DDUCKDB_EXTENSION_API_UNSTABLE_VERSION=\"$DUCKDB_VERSION\" -I$HEADER_DIR $XML_CFLAGS"
-LDFLAGS="-shared -fPIC -Wl,--exclude-libs,ALL -Wl,-Bsymbolic-functions"
 
-"$CC" $LDFLAGS $CFLAGS $CPPFLAGS -o "$RAW" "$SOURCE" $XML_LIBS
-"${R_HOME}/bin/Rscript" "$ROOT/tools/append_extension_metadata.R" \
-  --library-file "$RAW" \
-  --out-file "$FINAL" \
-  --extension-name rclinvarbitration \
-  --duckdb-platform "$PLATFORM" \
-  --duckdb-version "$DUCKDB_VERSION" \
-  --extension-version "$VERSION" \
-  --abi-type C_STRUCT_UNSTABLE
-rm -f "$RAW"
+for DUCKDB_VERSION in $BUILD_VERSIONS; do
+  HEADER_DIR="$CAPI_ROOT/$DUCKDB_VERSION"
+  OUT_DIR="$BUILD_ROOT/$DUCKDB_VERSION"
+  RAW="$OUT_DIR/rclinvarbitration.duckdb_extension.raw"
+  FINAL="$OUT_DIR/rclinvarbitration.duckdb_extension"
+  CPPFLAGS="-DNDEBUG -DDUCKDB_EXTENSION_NAME=rclinvarbitration -DDUCKDB_EXTENSION_API_VERSION_UNSTABLE=$DUCKDB_VERSION -DDUCKDB_EXTENSION_API_UNSTABLE_VERSION=\"$DUCKDB_VERSION\" -I$HEADER_DIR $XML_CFLAGS"
+  mkdir -p "$OUT_DIR"
 
-echo "Built $FINAL"
+  echo "Building RClinVarbitration extension for DuckDB $DUCKDB_VERSION..."
+  "$CC" $SHARED_FLAGS $CFLAGS $CPPFLAGS -o "$RAW" "$SOURCE" $XML_LIBS
+  "${R_HOME}/bin/Rscript" "$METADATA" \
+    --library-file "$RAW" \
+    --out-file "$FINAL" \
+    --extension-name rclinvarbitration \
+    --duckdb-platform "$PLATFORM" \
+    --duckdb-version "$DUCKDB_VERSION" \
+    --extension-version "$VERSION" \
+    --abi-type C_STRUCT_UNSTABLE
+  rm -f "$RAW"
+done
+
+echo "Built RClinVarbitration artifacts for: $BUILD_VERSIONS"

@@ -6,32 +6,44 @@ output: github_document
 
 # RClinVarbitration
 
-`RClinVarbitration` streams official ClinVar VCV XML releases into a DuckDB
-semantic graph. It has one native SQL scan surface:
+`RClinVarbitration` streams official ClinVar VCV XML/XML.GZ into focused
+relational DuckDB tables. It retains public VCV, RCV, SCV, AlleleID, and
+VariationID identifiers instead of exposing XML parser coordinates.
 
-```sql
-SELECT * FROM clinvar_xml_statements('ClinVarVCVRelease.xml.gz');
-```
+The package-owned native extension uses a libxml2 forward reader. An import
+reads the XML exactly once into a compact temporary semantic-fact table,
+projects ordinary ClinVar relations, and drops the temporary table. It does not
+build an XML DOM or R data frame and does not persist generic XML nodes, edges,
+or element statements.
 
-The package-owned DuckDB extension uses libxml2's forward reader, so it accepts
-large gzip XML files without an R data frame, an XML DOM, a staging TSV, or a
-community-extension ABI dependency. It uses DuckDB's version-coupled native C
-extension API and therefore loads only an exact engine-version artifact.
+Because the extension uses DuckDB's `C_STRUCT_UNSTABLE` interface, the package
+bundles and selects exact-version artifacts for DuckDB `v1.5.0` through
+`v1.5.4`. Connections must allow locally built unsigned extensions.
 
-Every source XML element becomes a node fact; every parent/child relationship,
-attribute, and non-whitespace text segment becomes an ordered statement. The R
-helpers materialize four ordinary DuckDB tables:
+## Relational schema
 
-- `clinvar_nodes`
-- `clinvar_edges`
-- `clinvar_literals`
-- `clinvar_text`
+| Relation | One row per |
+|:--|:--|
+| `clinvar_variants` | VCV variation archive |
+| `clinvar_alleles` | allele or variation component |
+| `clinvar_locations` | assembly-specific allele location |
+| `clinvar_genes` | allele–gene relation |
+| `clinvar_rcv_assertions` | RCV aggregate assertion |
+| `clinvar_scv_assertions` | submitted SCV assertion |
+| `clinvar_conditions` | condition attached to a VCV, RCV, or SCV |
+| `clinvar_condition_names` | preferred or alternate condition name |
+| `clinvar_observations` | SCV observation |
+| `clinvar_citations` | attributable citation |
+| `clinvar_citation_identifiers` | PMID, DOI, or other citation identifier |
+| `clinvar_attributes` | typed source attribute retained with its context |
+| `clinvar_text` | attributable comment, definition, condition name, or other discovery text |
+| `clinvar_normalized_alleles` | assembly/locus/ref/alt join view |
 
-`clinvar_text` is the discovery substrate. It holds comments, interpretation
-explanations, trait names/descriptions, observations, citation text, and other
-source text as separately attributable records. Dense or ColBERT indexing can
-operate over those rows without discarding their relationship to the source
-assertion.
+The source package includes one **unaltered official NCBI VCV XML.GZ record**
+for a fast executable smoke test. It is not synthetic data and is not presented
+as a full-release benchmark. Full releases use the same import call against
+`ClinVarVCVRelease_00-latest.xml.gz`; they belong in a file-backed DuckDB and
+are intentionally not reparsed whenever this README is rendered.
 
 ```{r example}
 library(DBI)
@@ -40,38 +52,82 @@ library(RClinVarbitration)
 
 con <- dbConnect(duckdb(config = list(allow_unsigned_extensions = "true")))
 rclinvarbitration_enable(con)
-fixture <- system.file(
+clinvar_xml <- system.file(
   "extdata", "VCV_XML_VCV000091629.xml.gz",
   package = "RClinVarbitration", mustWork = TRUE
 )
 counts <- rclinvarbitration_import_xml(
   con,
-  fixture,
-  release_id = "ncbi-vcv-sample"
+  clinvar_xml,
+  release_id = "ncbi-vcv-91629"
 )
-cat(paste0("statements: ", counts[["statements"]], "\ntext: ", counts[["text"]], "\n"))
+knitr::kable(
+  data.frame(relation = names(counts), rows = unname(counts)),
+  row.names = FALSE
+)
+```
 
-DBI::dbGetQuery(con, "
-  SELECT subject_id, text
-  FROM clinvar_text
-  WHERE release_id = 'ncbi-vcv-sample'
-    AND text ILIKE '%pathogenic%'
-  ORDER BY ordinal
-  LIMIT 20
+The normalized allele view is the join surface for downstream
+Rduckhts/DuckHTS work. RClinVarbitration does not duplicate VEP or PM5.
+
+```{r alleles}
+alleles <- dbGetQuery(con, "
+  SELECT vcv_accession, allele_id, variation_id, assembly,
+         chromosome, position_vcf, reference, alternate, canonical_spdi
+  FROM clinvar_normalized_alleles
+  ORDER BY assembly
 ")
+knitr::kable(alleles, row.names = FALSE)
+```
+
+SCV classifications remain separate from ClinVar's VCV and RCV aggregates, so
+later policy SQL can filter submitters and dates without reconstructing
+assertions from XML paths.
+
+```{r assertions}
+assertions <- dbGetQuery(con, "
+  SELECT scv_accession, submitter_name, classification,
+         review_status, date_last_evaluated
+  FROM clinvar_scv_assertions
+  ORDER BY scv_accession
+")
+knitr::kable(assertions, row.names = FALSE)
+```
+
+Long assertion explanations are queried as attributable text. The README
+selects and truncates them in SQL so knitr never prints a data frame padded to
+the width of the longest ClinVar comment.
+
+```{r evidence}
+evidence <- dbGetQuery(con, "
+  SELECT s.scv_accession,
+         left(t.text, 180) || CASE WHEN length(t.text) > 180 THEN '…' ELSE '' END AS excerpt
+  FROM clinvar_text t
+  JOIN clinvar_scv_assertions s
+    ON s.release_id = t.release_id
+   AND s.assertion_entity_id = t.scv_entity_id
+  WHERE t.section = 'comment'
+  ORDER BY s.scv_accession
+")
+knitr::kable(evidence, row.names = FALSE)
 
 DBI::dbDisconnect(con, shutdown = TRUE)
 ```
 
+For a full release, open a file-backed connection and pass the local official
+XML.GZ path to `rclinvarbitration_import_xml()`. The import is one forward XML
+pass; the resulting DuckDB relations are queried repeatedly without reparsing
+the gzip file.
+
 ClinVarbitration decision rules are intentionally a later versioned SQL layer
-on top of the retained assertion graph. VEP and PM5 remain DuckHTS/Rduckhts
-responsibilities and join an on-demand or cached P/LP view by normalized allele.
+over `clinvar_scv_assertions`. P/LP policy outputs will join
+`clinvar_normalized_alleles` by assembly, chromosome, position, reference, and
+alternate allele.
 
 ## Acknowledgement
 
 [Teague Sterling's DuckDB Webbed extension](https://github.com/teaguesterling/duckdb_webbed)
-informed the initial assessment of SQL-native XML ingestion and was tested
-against NCBI's real VCV XML. RClinVarbitration does not vendor or execute
-Webbed: it uses a package-owned libxml2 forward scan because the supported R
-DuckDB engine requires an exact native artifact and ClinVar publishes the full
-release as gzip XML.
+informed the initial assessment of SQL-native XML ingestion. RClinVarbitration
+does not vendor or execute Webbed: its package-owned libxml2 scan handles the
+official gzip VCV release and is built against each supported exact DuckDB
+engine version.

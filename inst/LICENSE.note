@@ -2,9 +2,10 @@
 
 ## DuckDB C extension headers
 
-`tools/ext/duckdb_capi/v1.5.3/` contains the DuckDB v1.5.3 C extension headers.
-Their pinned upstream revision is recorded in `duckdb_headers.json`; DuckDB is
-licensed under the MIT License.
+`tools/ext/duckdb_capi/v1.5.0/` through `v1.5.4/` contain the exact DuckDB
+C extension headers for every bundled `C_STRUCT_UNSTABLE` artifact. Each
+pinned upstream revision and repaired-header checksum is recorded in that
+version's `duckdb_headers.json`; DuckDB is licensed under the MIT License.
 
 ## libxml2
 
