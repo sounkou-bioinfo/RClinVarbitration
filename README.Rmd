@@ -1,0 +1,77 @@
+---
+output: github_document
+---
+
+<!-- README.md is generated from README.Rmd. -->
+
+# RClinVarbitration
+
+`RClinVarbitration` streams official ClinVar VCV XML releases into a DuckDB
+semantic graph. It has one native SQL scan surface:
+
+```sql
+SELECT * FROM clinvar_xml_statements('ClinVarVCVRelease.xml.gz');
+```
+
+The package-owned DuckDB extension uses libxml2's forward reader, so it accepts
+large gzip XML files without an R data frame, an XML DOM, a staging TSV, or a
+community-extension ABI dependency. It uses DuckDB's version-coupled native C
+extension API and therefore loads only an exact engine-version artifact.
+
+Every source XML element becomes a node fact; every parent/child relationship,
+attribute, and non-whitespace text segment becomes an ordered statement. The R
+helpers materialize four ordinary DuckDB tables:
+
+- `clinvar_nodes`
+- `clinvar_edges`
+- `clinvar_literals`
+- `clinvar_text`
+
+`clinvar_text` is the discovery substrate. It holds comments, interpretation
+explanations, trait names/descriptions, observations, citation text, and other
+source text as separately attributable records. Dense or ColBERT indexing can
+operate over those rows without discarding their relationship to the source
+assertion.
+
+```{r example}
+library(DBI)
+library(duckdb)
+library(RClinVarbitration)
+
+con <- dbConnect(duckdb(config = list(allow_unsigned_extensions = "true")))
+rclinvarbitration_enable(con)
+fixture <- system.file(
+  "extdata", "VCV_XML_VCV000091629.xml.gz",
+  package = "RClinVarbitration", mustWork = TRUE
+)
+counts <- rclinvarbitration_import_xml(
+  con,
+  fixture,
+  release_id = "ncbi-vcv-sample"
+)
+cat(paste0("statements: ", counts[["statements"]], "\ntext: ", counts[["text"]], "\n"))
+
+DBI::dbGetQuery(con, "
+  SELECT subject_id, text
+  FROM clinvar_text
+  WHERE release_id = 'ncbi-vcv-sample'
+    AND text ILIKE '%pathogenic%'
+  ORDER BY ordinal
+  LIMIT 20
+")
+
+DBI::dbDisconnect(con, shutdown = TRUE)
+```
+
+ClinVarbitration decision rules are intentionally a later versioned SQL layer
+on top of the retained assertion graph. VEP and PM5 remain DuckHTS/Rduckhts
+responsibilities and join an on-demand or cached P/LP view by normalized allele.
+
+## Acknowledgement
+
+[Teague Sterling's DuckDB Webbed extension](https://github.com/teaguesterling/duckdb_webbed)
+informed the initial assessment of SQL-native XML ingestion and was tested
+against NCBI's real VCV XML. RClinVarbitration does not vendor or execute
+Webbed: it uses a package-owned libxml2 forward scan because the supported R
+DuckDB engine requires an exact native artifact and ClinVar publishes the full
+release as gzip XML.

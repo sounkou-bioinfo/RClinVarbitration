@@ -1,0 +1,5 @@
+#!/bin/sh
+# Windows artifacts are not implemented yet. Do not silently install a binary
+# built for a different DuckDB ABI.
+echo "ERROR: RClinVarbitration currently supports package-owned DuckDB extension builds on Unix-like hosts only." >&2
+exit 1

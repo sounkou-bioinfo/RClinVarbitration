@@ -1,0 +1,29 @@
+Package: RClinVarbitration
+Type: Package
+Title: Stream ClinVar XML into DuckDB Semantic Graphs
+Version: 0.1.0
+Authors@R: c(
+    person(given = "Sounkou Mahamane", family = "Toure",
+           email = "sounkoutoure@gmail.com", role = c("aut", "cre")),
+    person(given = "DuckDB Foundation", role = "cph",
+           comment = "Bundled DuckDB C extension headers")
+    )
+Description: Streams official 'ClinVar' VCV XML releases, including gzip
+    inputs, into a queryable semantic graph in 'DuckDB'. A package-owned native
+    extension uses libxml2's forward reader and emits ordered XML element,
+    attribute, and text statements; SQL materializes graph and discovery-text
+    tables without loading the release into R. Versioned ClinVarbitration policy
+    is a derived SQL layer over the retained source facts.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 8.0.0
+Imports:
+    DBI
+Suggests:
+    duckdb,
+    roxygen2,
+    tinytest
+SystemRequirements: libxml2 (>= 2.9.0), pkg-config, C compiler
+URL: https://github.com/sounkou-bioinfo/RClinVarbitration
+BugReports: https://github.com/sounkou-bioinfo/RClinVarbitration/issues

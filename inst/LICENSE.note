@@ -1,0 +1,20 @@
+# RClinVarbitration source notices
+
+## DuckDB C extension headers
+
+`tools/ext/duckdb_capi/v1.5.3/` contains the DuckDB v1.5.3 C extension headers.
+Their pinned upstream revision is recorded in `duckdb_headers.json`; DuckDB is
+licensed under the MIT License.
+
+## libxml2
+
+The native extension links the host libxml2 library through `pkg-config`; it
+does not bundle libxml2. libxml2 is MIT-licensed. The extension uses only the
+forward-reader API and relies on its zlib-enabled XML.GZ support.
+
+## ClinVar test fixture
+
+`inst/extdata/VCV_XML_VCV000091629.xml.gz` is the public NCBI ClinVar sample
+`VCV_XML_VCV000091629.xml`, downloaded from
+`https://ftp.ncbi.nlm.nih.gov/pub/clinvar/xml/sample_xml/` and gzip-compressed
+unchanged for exercising the production XML.GZ scan path.

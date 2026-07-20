@@ -1,0 +1,7 @@
+*.tar.gz
+*.Rcheck/
+.Rproj.user
+.Rhistory
+.RData
+README.html
+inst/rclinvarbitration_extension/build/

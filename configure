@@ -1,0 +1,62 @@
+#!/bin/sh
+set -eu
+
+ROOT=`CDPATH= cd -- "$(dirname -- "$0")" && pwd`
+if [ -z "${R_HOME:-}" ]; then
+  R_HOME=`R RHOME`
+fi
+VERSION=`awk -F': *' '/^Version:/ {print $2; exit}' "$ROOT/DESCRIPTION"`
+DUCKDB_VERSION=v1.5.3
+HEADER_DIR="$ROOT/tools/ext/duckdb_capi/$DUCKDB_VERSION"
+SOURCE="$ROOT/tools/ext/rclinvarbitration_extension.c"
+OUT_DIR="$ROOT/inst/rclinvarbitration_extension/build/$DUCKDB_VERSION"
+RAW="$OUT_DIR/rclinvarbitration.duckdb_extension.raw"
+FINAL="$OUT_DIR/rclinvarbitration.duckdb_extension"
+
+for file in "$HEADER_DIR/duckdb.h" "$HEADER_DIR/duckdb_extension.h" "$SOURCE" "$ROOT/tools/append_extension_metadata.R"; do
+  if [ ! -f "$file" ]; then
+    echo "ERROR: required native extension file is missing: $file" >&2
+    exit 1
+  fi
+done
+
+if ! command -v pkg-config >/dev/null 2>&1 || ! pkg-config --exists libxml-2.0; then
+  echo "ERROR: RClinVarbitration requires libxml2 development headers and pkg-config" >&2
+  exit 1
+fi
+
+CC=`"${R_HOME}/bin/R" CMD config CC | cut -f1 -d' '`
+R_CFLAGS=`"${R_HOME}/bin/R" CMD config CFLAGS`
+R_CPICFLAGS=`"${R_HOME}/bin/R" CMD config CPICFLAGS`
+XML_CFLAGS=`pkg-config --cflags libxml-2.0`
+XML_LIBS=`pkg-config --libs libxml-2.0`
+
+OS=`uname -s`
+ARCH=`uname -m`
+case "$OS/$ARCH" in
+  Linux/x86_64) PLATFORM=linux_amd64 ;;
+  Linux/aarch64|Linux/arm64) PLATFORM=linux_arm64 ;;
+  Darwin/x86_64) PLATFORM=osx_amd64 ;;
+  Darwin/arm64) PLATFORM=osx_arm64 ;;
+  *) echo "ERROR: unsupported DuckDB extension platform: $OS/$ARCH" >&2; exit 1 ;;
+esac
+
+mkdir -p "$OUT_DIR"
+rm -f "$RAW" "$FINAL"
+
+CFLAGS="$R_CFLAGS $R_CPICFLAGS -O2 -fPIC -fvisibility=hidden -Wall -Wextra -Werror"
+CPPFLAGS="-DNDEBUG -DDUCKDB_EXTENSION_NAME=rclinvarbitration -DDUCKDB_EXTENSION_API_VERSION_UNSTABLE=$DUCKDB_VERSION -DDUCKDB_EXTENSION_API_UNSTABLE_VERSION=\"$DUCKDB_VERSION\" -I$HEADER_DIR $XML_CFLAGS"
+LDFLAGS="-shared -fPIC -Wl,--exclude-libs,ALL -Wl,-Bsymbolic-functions"
+
+"$CC" $LDFLAGS $CFLAGS $CPPFLAGS -o "$RAW" "$SOURCE" $XML_LIBS
+"${R_HOME}/bin/Rscript" "$ROOT/tools/append_extension_metadata.R" \
+  --library-file "$RAW" \
+  --out-file "$FINAL" \
+  --extension-name rclinvarbitration \
+  --duckdb-platform "$PLATFORM" \
+  --duckdb-version "$DUCKDB_VERSION" \
+  --extension-version "$VERSION" \
+  --abi-type C_STRUCT_UNSTABLE
+rm -f "$RAW"
+
+echo "Built $FINAL"

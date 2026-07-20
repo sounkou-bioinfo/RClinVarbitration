@@ -1,0 +1,10 @@
+^\.git$
+^\.gitignore$
+^RClinVarbitration\.Rproj$
+^RClinVarbitration_[0-9.]+\.tar\.gz$
+^RClinVarbitration\.Rcheck$
+^\.pi$
+^README\.html$
+^README\.Rmd$
+^Makefile$
+^inst/rclinvarbitration_extension/build($|/)
