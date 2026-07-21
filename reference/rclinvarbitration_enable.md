@@ -1,10 +1,8 @@
 # Enable native ClinVar XML scanning on a DuckDB connection
 
-Loads the package-owned `rclinvarbitration` extension and DuckDB's
-official JSON extension. The latter is downloaded through DuckDB on
-first use when it is not already installed; JSON is required to project
-compact parser rows. Its native `clinvar_xml_entities(path)` table
-function is the compact, ClinVar-specific one-pass staging surface used
+Loads the package-owned `rclinvarbitration` extension. Its native
+`clinvar_xml_entities(path)` table function and `rclinvar_json_field()`
+scalar are the compact, ClinVar-specific one-pass staging surface used
 by
 [`rclinvarbitration_import_xml()`](https://sounkou-bioinfo.github.io/RClinVarbitration/reference/rclinvarbitration_import_xml.md).
 The connection must have been created with

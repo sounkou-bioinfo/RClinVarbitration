@@ -54,6 +54,11 @@
 <p>The package-owned native extension uses a libxml2 forward reader. An import reads the gzip XML exactly once and writes one compact JSON-backed row per selected ClinVar entity to a disk-backed staging table. It then projects ordinary ClinVar relations without an EAV pivot and drops staging. It does not build an XML DOM or R data frame and does not persist generic XML nodes, edges, or element statements.</p>
 <p>Because the extension uses DuckDB’s <code>C_STRUCT_UNSTABLE</code> interface, the package bundles and selects exact-version artifacts for DuckDB <code>v1.5.0</code> through <code>v1.5.4</code>. Connections must allow locally built unsigned extensions.</p>
 <div class="section level2">
+<h2 id="webr--webassembly">webR / WebAssembly<a class="anchor" aria-label="anchor" href="#webr--webassembly"></a>
+</h2>
+<p>webR support is experimental. <code>configure</code> builds the same version-matched DuckDB extension as an Emscripten side module, retaining libxml2’s forward reader and gzip input support. The browser smoke workflow installs the wasm package, loads the bundled extension in DuckDB, scans the installed compressed VCV fixture, and imports it into the relational schema. Browser callers must place any larger ClinVar XML/XML.GZ file in webR’s virtual filesystem before calling <code><a href="reference/rclinvarbitration_import_xml.html">rclinvarbitration_import_xml()</a></code>.</p>
+</div>
+<div class="section level2">
 <h2 id="relational-schema">Relational schema<a class="anchor" aria-label="anchor" href="#relational-schema"></a>
 </h2>
 <table class="table">
@@ -154,7 +159,7 @@
 </table>
 <p><code>clinvar_locations</code> retains every source assembly location, including its VCF position, reference, and alternate alleles. <code>clinvar_normalized_alleles</code> exposes those normalized joins for GRCh37, GRCh38, and NCBI36; no GRCh37 coordinates are discarded.</p>
 <p>The release-scale tables retain explicit logical key columns but do not create DuckDB ART indexes: those indexes must remain memory-resident and are a poor fit for a complete analytical release. Only the small completion and policy-profile catalogues retain primary keys.</p>
-<p>The executable README requires the complete local <code>ClinVarVCVRelease_00-latest.xml.gz</code>, selected with <code>CLINVAR_VCV_XML_FILE</code>, and an explicit immutable release label in <code>CLINVAR_RELEASE_ID</code>. It does not substitute the bundled one-record regression fixture. A <strong>file-backed</strong> DuckDB holds the complete import so every following query reuses the same data rather than rescanning XML. Set <code>CLINVAR_DUCKDB_FILE</code> to retain and reuse a completed import across renders; otherwise the executable document uses a temporary database. On first use, <code><a href="reference/rclinvarbitration_enable.html">rclinvarbitration_enable()</a></code> installs DuckDB’s official, version-matched JSON extension when necessary. The connection therefore needs permission to download DuckDB extensions once; a restricted environment can run <code>INSTALL json</code> on the connection before enabling RClinVarbitration.</p>
+<p>The executable README requires the complete local <code>ClinVarVCVRelease_00-latest.xml.gz</code>, selected with <code>CLINVAR_VCV_XML_FILE</code>, and an explicit immutable release label in <code>CLINVAR_RELEASE_ID</code>. It does not substitute the bundled one-record regression fixture. A <strong>file-backed</strong> DuckDB holds the complete import so every following query reuses the same data rather than rescanning XML. Set <code>CLINVAR_DUCKDB_FILE</code> to retain and reuse a completed import across renders; otherwise the executable document uses a temporary database. Compact parser rows remain JSON-backed, but the package-owned <code>rclinvar_json_field()</code> scalar projects their fields without DuckDB’s separately downloadable JSON extension. No network access is required to enable or import a release.</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://dbi.r-dbi.org" class="external-link">DBI</a></span><span class="op">)</span></span>
 <span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://r.duckdb.org/" class="external-link">duckdb</a></span><span class="op">)</span></span>
@@ -869,9 +874,9 @@
 <td align="left">613647</td>
 <td align="left"><not supplied by clinvar></not></td>
 <td align="right">1</td>
-<td align="left">GRCh37</td>
+<td align="left">GRCh38</td>
 <td align="left">7</td>
-<td align="right">4820844</td>
+<td align="right">4781213</td>
 <td align="left">GGAT</td>
 <td align="left">TGCTGTAAACTGTAACTGTAAA</td>
 </tr>
@@ -882,9 +887,9 @@
 <td align="left">613647</td>
 <td align="left"><not supplied by clinvar></not></td>
 <td align="right">1</td>
-<td align="left">GRCh38</td>
+<td align="left">GRCh37</td>
 <td align="left">7</td>
-<td align="right">4781213</td>
+<td align="right">4820844</td>
 <td align="left">GGAT</td>
 <td align="left">TGCTGTAAACTGTAACTGTAAA</td>
 </tr>
@@ -947,9 +952,9 @@
 <td align="left">618241</td>
 <td align="left"><not supplied by clinvar></not></td>
 <td align="right">1</td>
-<td align="left">GRCh38</td>
+<td align="left">GRCh37</td>
 <td align="left">11</td>
-<td align="right">126275389</td>
+<td align="right">126145284</td>
 <td align="left">C</td>
 <td align="left">T</td>
 </tr>
@@ -960,9 +965,9 @@
 <td align="left">618241</td>
 <td align="left"><not supplied by clinvar></not></td>
 <td align="right">1</td>
-<td align="left">GRCh37</td>
+<td align="left">GRCh38</td>
 <td align="left">11</td>
-<td align="right">126145284</td>
+<td align="right">126275389</td>
 <td align="left">C</td>
 <td align="left">T</td>
 </tr>
@@ -1136,12 +1141,12 @@
 <tr>
 <td align="left">SCV000020201</td>
 <td align="left">OMIM</td>
-<td align="left">Reason: Outlier claim with insufficient supporting evidence</td>
+<td align="left">Notes: None</td>
 </tr>
 <tr>
 <td align="left">SCV000020201</td>
 <td align="left">OMIM</td>
-<td align="left">Notes: None</td>
+<td align="left">Reason: Outlier claim with insufficient supporting evidence</td>
 </tr>
 <tr>
 <td align="left">SCV000020580</td>
