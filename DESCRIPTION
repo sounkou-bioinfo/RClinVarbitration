@@ -30,5 +30,6 @@ Suggests:
     roxygen2,
     tinytest
 SystemRequirements: libxml2 (>= 2.9.0), pkg-config, C compiler
-URL: https://github.com/sounkou-bioinfo/RClinVarbitration
+URL: https://github.com/sounkou-bioinfo/RClinVarbitration,
+    https://sounkou-bioinfo.github.io/RClinVarbitration/
 BugReports: https://github.com/sounkou-bioinfo/RClinVarbitration/issues

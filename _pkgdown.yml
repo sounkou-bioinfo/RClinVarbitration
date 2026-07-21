@@ -1,0 +1,21 @@
+url: https://sounkou-bioinfo.github.io/RClinVarbitration/
+template:
+  bootstrap: 5
+
+navbar:
+  structure:
+    left: [intro, reference, news]
+    right: [search, github]
+
+reference:
+  - title: Connection and import
+    contents:
+      - rclinvarbitration_extension_path
+      - rclinvarbitration_enable
+      - rclinvarbitration_init
+      - rclinvarbitration_import_xml
+  - title: Schema and policy
+    contents:
+      - rclinvarbitration_schema_sql
+      - rclinvarbitration_policy_version
+      - rclinvarbitration_policy_sql

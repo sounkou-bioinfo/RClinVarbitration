@@ -1,6 +1,4 @@
-# RClinVarbitration development news
-
-## 0.1.1
+# RClinVarbitration 0.1.1
 
 - Bundle exact `C_STRUCT_UNSTABLE` extension artifacts for DuckDB `v1.5.0`
   through `v1.5.4`, selected from the enabled connection's engine version.
@@ -22,7 +20,7 @@
   file-backed import; all displayed summaries query that persisted import and
   never rescan XML.
 
-## 0.1.0
+# RClinVarbitration 0.1.0
 
 - First public release.
 - Added a package-owned DuckDB C extension with

@@ -4,5 +4,6 @@
 .Rhistory
 .RData
 README.html
+docs/
 .pi/
 inst/rclinvarbitration_extension/build/

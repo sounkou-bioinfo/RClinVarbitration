@@ -1,5 +1,8 @@
 ^\.git$
 ^\.gitignore$
+^\.github$
+^_pkgdown\.yml$
+^docs$
 ^RClinVarbitration\.Rproj$
 ^RClinVarbitration_[0-9.]+\.tar\.gz$
 ^RClinVarbitration\.Rcheck$
