@@ -1,0 +1,276 @@
+# Semantic retrieval, DuckLake, and VariantStory
+
+## Motivation beyond variant annotation
+
+RClinVarbitration is not only a faster way to attach an aggregate label
+to an allele. The VCV release contains attributable submission text,
+condition and phenotype links, gene relations, observations, and
+literature identifiers. A relational representation makes that evidence
+reusable for:
+
+- phenotype- and text-driven dynamic gene-panel proposals;
+- retrieval of submission rationales and literature around a candidate;
+- disease-aware review of conflicting or VUS assertions;
+- prioritization of novel variants through gene, disease, phenotype, and
+  literature context; and
+- release-to-release reanalysis.
+
+Embedding similarity or a database neighbor must not itself reclassify a
+VUS or novel variant. It can propose candidates and retrieve source
+evidence. Clinical evidence admission, deterministic criteria, and human
+review remain separate steps.
+
+## Discovery-oriented views
+
+Four views provide compact starting surfaces:
+
+| View | Purpose |
+|:---|:---|
+| `clinvar_semantic_documents` | attributable text with VCV, SCV, submitter, submitted classification, and gene lists |
+| `clinvar_hpo_terms` | normalized `HP:nnnnnnn` identifiers from ClinVar cross-references |
+| `clinvar_literature_links` | PubMed, DOI, PMC, Bookshelf, and source URLs with assertion context |
+| `clinvar_gene_summaries` | disease-aware classification counts by release, policy profile, and gene |
+
+On the complete 2026-07-02 release these views expose 30,649,367
+semantic text rows, including 4,213,102 comments and 5,937,873 submitted
+descriptions; 24,178 HPO links covering 2,628 distinct terms; and
+8,252,297 citation/link rows. These are observed source counts, not
+claims that every text or link is independent or clinically admissible.
+
+A complete scan of the gene summary view produced 92,789 genes in 20.7
+seconds on the benchmark host. Materializing it once took 23.2 seconds,
+after which an exact BRCA1 lookup took 3 milliseconds. Workloads that
+repeatedly query gene summaries should therefore version a
+materialization rather than recompute the view for every request.
+
+``` sql
+CREATE TABLE clinvar_gene_summary_cache AS
+SELECT * FROM clinvar_gene_summaries;
+
+SELECT *
+FROM clinvar_gene_summary_cache
+WHERE gene_key = 'ncbigene:672';
+```
+
+## Using ducksemantics
+
+[`ducksemantics`](https://github.com/sounkou-bioinfo/ducksemantics) can
+store HPO ontology structure and dense or late-interaction embeddings in
+DuckDB. The two packages can use one connection: RClinVarbitration owns
+ClinVar source semantics, while ducksemantics owns ontology and
+retrieval mechanics.
+
+Select an attributable and bounded document collection before embedding.
+For example, comments and submitted descriptions are generally more
+useful than embedding every HGVS or assertion-method row.
+
+``` r
+
+library(ducksemantics)
+
+# `con` is the already initialized RClinVarbitration DuckDB connection.
+ducksemantics_init(con)
+
+documents <- DBI::dbGetQuery(con, "
+  SELECT semantic_document_id, text
+  FROM clinvar_semantic_documents
+  WHERE release_id = 'ncbi-vcv-2026-07-02'
+    AND section IN ('comment', 'attribute:Description')
+    AND length(text) >= 40
+")
+
+vectors <- ducksemantics_embed_cached(
+  documents$text,
+  provider = dense_provider,
+  cache_dir = "clinvar-embedding-cache"
+)
+ducksemantics_embedding_batch(
+  vectors,
+  subject_id = documents$semantic_document_id,
+  subject_kind = "clinvar_document",
+  provider = "embeddinggemma-clinvar-v1",
+  text = documents$text
+) |>
+  ducksemantics_write_embeddings(con, replace = TRUE)
+```
+
+`dense_provider` is deliberately not created by RClinVarbitration:
+model, weights digest, task prompt, dimensions, and privacy policy
+belong to the semantic run receipt. The stored `subject_id` joins every
+hit back to the exact ClinVar text row.
+
+Direct HPO identifiers can join a pinned HPO graph without embedding:
+
+``` sql
+SELECT h.vcv_accession, h.scv_entity_id, h.hpo_id, n.label
+FROM clinvar_hpo_terms h
+JOIN semantic_nodes n
+  ON n.family = 'HPO' AND n.node_id = h.hpo_id
+WHERE h.release_id = 'ncbi-vcv-2026-07-02';
+```
+
+After a semantic search writes or registers a
+`semantic_hits(subject_id, score)` relation, a transparent dynamic
+gene-panel proposal can be formed:
+
+``` sql
+SELECT gene_symbol,
+       max(h.score) AS best_text_score,
+       count(DISTINCT d.semantic_document_id) AS supporting_documents,
+       max(g.pathogenic_allele_count) AS clinvar_pathogenic_alleles
+FROM semantic_hits h
+JOIN clinvar_semantic_documents d
+  ON d.semantic_document_id = h.subject_id
+CROSS JOIN unnest(d.gene_symbols) AS genes(gene_symbol)
+LEFT JOIN clinvar_gene_summary_cache g
+  ON g.release_id = d.release_id AND g.symbol = genes.gene_symbol
+GROUP BY gene_symbol
+ORDER BY best_text_score DESC, supporting_documents DESC;
+```
+
+This is a candidate panel with explicit retrieval support, not a
+validated gene-disease panel. Preserve score, source document IDs,
+release, model receipt, and policy profile so reviewers can inspect why
+a gene was proposed.
+
+## Publishing releases to DuckLake
+
+DuckLake is useful when multiple applications need immutable source
+releases, Parquet-backed tables, snapshot history, and
+release-to-release deltas. The recommended boundary is:
+
+1.  download and checksum the source;
+2.  import into a local file-backed DuckDB staging database;
+3.  validate row counts, release metadata, and policy outputs;
+4.  append typed source tables to DuckLake in one publication
+    transaction; and
+5.  materialize derived policy tables separately with policy/profile
+    identity.
+
+Do not use a DuckLake snapshot number as a replacement for ClinVar’s own
+source release. Record both. A DuckLake snapshot says when the lake
+changed; the `release_id`, source URL, digest, and import/policy
+versions say what was published.
+
+A local DuckLake attachment can be created with standard DuckDB SQL:
+
+``` r
+
+metadata <- normalizePath("clinvar-metadata.ducklake", mustWork = FALSE)
+data_path <- normalizePath("clinvar-lake-data", mustWork = FALSE)
+dir.create(data_path, recursive = TRUE, showWarnings = FALSE)
+
+DBI::dbExecute(con, "INSTALL ducklake")
+DBI::dbExecute(con, "LOAD ducklake")
+attach_sql <- paste(
+  "ATTACH",
+  DBI::dbQuoteString(con, paste0("ducklake:", metadata)),
+  "AS clinvar_lake (DATA_PATH",
+  DBI::dbQuoteString(con, data_path),
+  ")"
+)
+DBI::dbExecute(con, attach_sql)
+```
+
+For the first publication, create a typed DuckLake table from a
+validated source relation. Later releases append rows with a new
+immutable release ID. In production, execute the complete table set in
+one checked transaction and record its DuckLake snapshot and transform
+receipt.
+
+``` sql
+BEGIN TRANSACTION;
+
+CREATE TABLE clinvar_lake.main.clinvar_releases AS
+SELECT * FROM main.clinvar_releases
+WHERE release_id = 'ncbi-vcv-2026-07-02';
+
+CREATE TABLE clinvar_lake.main.clinvar_variants AS
+SELECT * FROM main.clinvar_variants
+WHERE release_id = 'ncbi-vcv-2026-07-02';
+
+CREATE TABLE clinvar_lake.main.clinvar_policy_decisions AS
+SELECT * FROM main.clinvar_policy_decisions
+WHERE release_id = 'ncbi-vcv-2026-07-02'
+  AND policy_version = 'cpg-clinvarbitration-2.2.11'
+  AND profile_id = 'default';
+
+COMMIT;
+```
+
+Source and derived relations should not be conflated. A new arbitration
+profile can produce a new derived snapshot without pretending the NCBI
+source changed. Conversely, a new ClinVar release can invalidate only
+affected downstream materializations.
+
+A future `clinDuckLake` adapter can own this publication transaction,
+table manifest, snapshot receipt, and release-delta API. It should call
+RClinVarbitration for source parsing and policy views rather than
+implementing a second ClinVar parser or arbitration kernel.
+RClinVarbitration should not take a hard DuckLake dependency merely to
+support local single-release analysis.
+
+## VariantStory boundary
+
+[`VariantStory`](https://github.com/sounkou-bioinfo/VariantStory)
+separates source observations, case-independent classification, case
+prioritization, evidence admission, and review. RClinVarbitration fits
+as a release-pinned supplementary-source adapter:
+
+- raw SCVs, text, HPO links, and citations are source observations;
+- `clinvar_policy_decisions` is a provider- and policy-scoped derived
+  observation, not a native VariantStory SVC verdict;
+- `clinvar_policy_pathogenic_alleles` supports the named ClinVar P/LP
+  prioritization module after exact assembly/allele and disease-context
+  joins;
+- semantic/HPO retrieval may propose gene-condition candidates or
+  literature claims, but cannot admit evidence on its own; and
+- DuckLake release and transform receipts allow VariantStory to
+  recompute only contexts affected by a new ClinVar release or
+  arbitration profile.
+
+VariantStory does not yet expose an executable RClinVarbitration
+adapter. Until that contract is implemented and tested, use these
+relations as an explicit integration design, not a claim that ClinVar
+evidence is automatically mapped to SVC criteria.
+
+### Talos 11.1 compatibility target
+
+Talos commit
+[`dc0278df0c0af80614963444f3766e22e8124c27`](https://github.com/populationgenomics/talos/commit/dc0278df0c0af80614963444f3766e22e8124c27)
+(version 11.1.0) is a useful new pinned oracle. It removes Talos’s
+private BCFtools fork because the required greedy coding/non-coding
+behavior is in upstream BCFtools 1.24, and invokes
+`bcftools csq --greedy 1 --local-csq`. It also introduces STRipy-derived
+short-tandem-repeat records as a separate Talos variant type.
+
+That sharpens two integration boundaries:
+
+- DuckHTS/VariantStory compatibility should target official BCFtools
+  1.24 with the exact `--greedy 1 --local-csq` profile, not an
+  unspecified BCFtools result or the former private fork.
+- STR evidence needs its own callset identity, repeat-count and
+  disease-range semantics, inheritance logic, and evaluation profile.
+  ClinVar gene/HPO/text relations can support retrieval for an STR
+  locus, but an allele-level ClinVarbitration label must not be silently
+  applied to a repeat expansion.
+
+RClinVarbitration still supplies release-pinned ClinVar source
+observations; it does not own BCFtools consequence projection or STR
+genotype interpretation.
+
+For VUS and novel-variant workflows, the safe sequence is:
+
+``` text
+case allele + consequence
+  -> exact ClinVar allele/disease observations
+  -> HPO and semantic candidate retrieval
+  -> attributable text and literature inspection
+  -> explicit evidence claims and admission
+  -> deterministic condition-specific evaluation
+  -> human review
+```
+
+This preserves the useful discovery signal while keeping source
+authority, model proposals, policy decisions, and clinical review
+distinguishable.

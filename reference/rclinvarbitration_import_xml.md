@@ -12,7 +12,14 @@ imports remove partial rows for `release_id`.
 ## Usage
 
 ``` r
-rclinvarbitration_import_xml(con, path, release_id, replace = FALSE)
+rclinvarbitration_import_xml(
+  con,
+  path,
+  release_id,
+  replace = FALSE,
+  source_url = NULL,
+  source_md5 = NULL
+)
 ```
 
 ## Arguments
@@ -32,6 +39,18 @@ rclinvarbitration_import_xml(con, path, release_id, replace = FALSE)
 - replace:
 
   Replace rows already stored for `release_id`?
+
+- source_url:
+
+  Optional source URL for the release catalogue. When `path` is returned
+  directly by
+  [`rclinvarbitration_download_clinvar()`](https://sounkou-bioinfo.github.io/RClinVarbitration/reference/rclinvarbitration_download_clinvar.md),
+  its download metadata supplies this value automatically.
+
+- source_md5:
+
+  Optional 32-character source MD5 digest. Download metadata is used
+  automatically when available.
 
 ## Value
 

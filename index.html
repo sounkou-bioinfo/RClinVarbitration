@@ -31,7 +31,18 @@
 
     <div id="navbar" class="collapse navbar-collapse ms-3">
       <ul class="navbar-nav me-auto">
+<li class="nav-item dropdown">
+  <button class="nav-link dropdown-toggle" type="button" id="dropdown-articles" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Articles</button>
+  <ul class="dropdown-menu" aria-labelledby="dropdown-articles">
+<li><hr class="dropdown-divider"></li>
+    <li><h6 class="dropdown-header" data-toc-skip>Concepts and integrations</h6></li>
+    <li><a class="dropdown-item" href="articles/arbitration-algorithm.html">ClinVarbitration arbitration algorithm</a></li>
+    <li><a class="dropdown-item" href="articles/storage-cache-and-performance.html">Storage, caching, and full-release performance</a></li>
+    <li><a class="dropdown-item" href="articles/semantic-ducklake-variantstory.html">Semantic retrieval, DuckLake, and VariantStory</a></li>
+  </ul>
+</li>
 <li class="nav-item"><a class="nav-link" href="reference/index.html">Reference</a></li>
+<li class="nav-item"><a class="external-link nav-link" href="https://github.com/sounkou-bioinfo/RClinVarbitration/blob/main/docs/ERRATA.md">Errata</a></li>
 <li class="nav-item"><a class="nav-link" href="news/index.html">Changelog</a></li>
       </ul>
 <ul class="navbar-nav">
@@ -63,7 +74,7 @@
 <span>    CRAN <span class="op">=</span> <span class="st">"https://cloud.r-project.org"</span></span>
 <span>  <span class="op">)</span></span>
 <span><span class="op">)</span></span></code></pre></div>
-<p>Native builds currently support Linux and macOS and require libxml2, zlib, <code>pkg-config</code>, and a C compiler. <code>OS_type: unix</code> prevents an unsupported Windows installation; a Windows DuckDB-extension build has not yet been implemented. webR is supported separately through the tested Emscripten build and is Unix-like for R package metadata purposes.</p>
+<p>Native builds support Linux, macOS, and x86-64 Windows. Linux and macOS require libxml2, zlib, <code>pkg-config</code>, and a C compiler. On Windows, install a current Rtools release; its target-aware <code>pkg-config</code> supplies the static libxml2 and zlib dependencies. webR is supported separately through the tested Emscripten build.</p>
 </div>
 <div class="section level2">
 <h2 id="quick-start">Quick start<a class="anchor" aria-label="anchor" href="#quick-start"></a>
@@ -74,7 +85,6 @@
 <span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/sounkou-bioinfo/RClinVarbitration" class="external-link">RClinVarbitration</a></span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">con</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://dbi.r-dbi.org/reference/dbConnect.html" class="external-link">dbConnect</a></span><span class="op">(</span><span class="fu"><a href="https://r.duckdb.org/reference/duckdb.html" class="external-link">duckdb</a></span><span class="op">(</span>config <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>allow_unsigned_extensions <span class="op">=</span> <span class="st">"true"</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/on.exit.html" class="external-link">on.exit</a></span><span class="op">(</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbDisconnect.html" class="external-link">dbDisconnect</a></span><span class="op">(</span><span class="va">con</span>, shutdown <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span><span class="op">)</span></span>
 <span></span>
 <span><span class="fu"><a href="reference/rclinvarbitration_enable.html">rclinvarbitration_enable</a></span><span class="op">(</span><span class="va">con</span><span class="op">)</span></span>
 <span><span class="fu"><a href="reference/rclinvarbitration_init.html">rclinvarbitration_init</a></span><span class="op">(</span><span class="va">con</span><span class="op">)</span></span>
@@ -84,17 +94,40 @@
 <span>  <span class="st">"extdata"</span>, <span class="st">"VCV_XML_VCV000091629.xml.gz"</span>,</span>
 <span>  package <span class="op">=</span> <span class="st">"RClinVarbitration"</span></span>
 <span><span class="op">)</span></span>
-<span><span class="fu"><a href="reference/rclinvarbitration_import_xml.html">rclinvarbitration_import_xml</a></span><span class="op">(</span><span class="va">con</span>, <span class="va">xml</span>, release_id <span class="op">=</span> <span class="st">"clinvar-example"</span><span class="op">)</span></span>
+<span><span class="va">imported</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/rclinvarbitration_import_xml.html">rclinvarbitration_import_xml</a></span><span class="op">(</span></span>
+<span>  <span class="va">con</span>, <span class="va">xml</span>, release_id <span class="op">=</span> <span class="st">"clinvar-example"</span></span>
+<span><span class="op">)</span></span>
 <span></span>
 <span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbGetQuery.html" class="external-link">dbGetQuery</a></span><span class="op">(</span><span class="va">con</span>, <span class="st">"</span></span>
 <span><span class="st">  SELECT vcv_accession, variation_id, aggregate_classification</span></span>
 <span><span class="st">  FROM clinvar_variants</span></span>
 <span><span class="st">"</span><span class="op">)</span></span></code></pre></div>
+<div class="sourceCode" id="cb3"><pre class="sourceCode R"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" tabindex="-1"></a><span class="do">##   vcv_accession variation_id     aggregate_classification</span></span>
+<span id="cb3-2"><a href="#cb3-2" tabindex="-1"></a><span class="do">## 1  VCV000091629        91629 Pathogenic/Likely pathogenic</span></span></code></pre></div>
+<p>For a complete current or archived release, use the checksum-validating download cache and a file-backed database:</p>
+<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">release</span> <span class="op">&lt;-</span> <span class="st">"2026-03"</span></span>
+<span><span class="va">xml</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/rclinvarbitration_download_clinvar.html">rclinvarbitration_download_clinvar</a></span><span class="op">(</span><span class="va">release</span><span class="op">)</span></span>
+<span><span class="co"># `"latest"` is also accepted, but assign its resolved content an immutable ID.</span></span>
+<span></span>
+<span><span class="va">full_con</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://dbi.r-dbi.org/reference/dbConnect.html" class="external-link">dbConnect</a></span><span class="op">(</span><span class="fu"><a href="https://r.duckdb.org/reference/duckdb.html" class="external-link">duckdb</a></span><span class="op">(</span></span>
+<span>  dbdir <span class="op">=</span> <span class="st">"clinvar.duckdb"</span>,</span>
+<span>  config <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span>    allow_unsigned_extensions <span class="op">=</span> <span class="st">"true"</span>,</span>
+<span>    memory_limit <span class="op">=</span> <span class="st">"2GB"</span>,</span>
+<span>    preserve_insertion_order <span class="op">=</span> <span class="st">"false"</span>,</span>
+<span>    threads <span class="op">=</span> <span class="st">"2"</span></span>
+<span>  <span class="op">)</span></span>
+<span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="fu"><a href="reference/rclinvarbitration_enable.html">rclinvarbitration_enable</a></span><span class="op">(</span><span class="va">full_con</span><span class="op">)</span></span>
+<span><span class="fu"><a href="reference/rclinvarbitration_import_xml.html">rclinvarbitration_import_xml</a></span><span class="op">(</span></span>
+<span>  <span class="va">full_con</span>, <span class="va">xml</span>, release_id <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste0</a></span><span class="op">(</span><span class="st">"ncbi-vcv-"</span>, <span class="va">release</span><span class="op">)</span></span>
+<span><span class="op">)</span></span></code></pre></div>
 <p>The main query surfaces are:</p>
 <table class="table">
 <colgroup>
-<col width="65%">
-<col width="34%">
+<col width="52%">
+<col width="47%">
 </colgroup>
 <thead><tr>
 <th align="left">Relation</th>
@@ -108,40 +141,51 @@
 <td align="left">VCV records and assembly-specific alleles</td>
 </tr>
 <tr>
-<td align="left"><code>clinvar_rcv_assertions</code></td>
-<td align="left">disease-specific ClinVar aggregates</td>
-</tr>
-<tr>
-<td align="left"><code>clinvar_scv_assertions</code></td>
-<td align="left">individual submissions and submitters</td>
+<td align="left">
+<code>clinvar_rcv_assertions</code>, <code>clinvar_scv_assertions</code>
+</td>
+<td align="left">disease aggregates and individual submissions</td>
 </tr>
 <tr>
 <td align="left">
-<code>clinvar_conditions</code>, <code>clinvar_observations</code>, <code>clinvar_citations</code>, <code>clinvar_text</code>
+<code>clinvar_conditions</code>, <code>clinvar_observations</code>, <code>clinvar_text</code>
 </td>
-<td align="left">attributable evidence</td>
+<td align="left">attributable condition, observation, and text evidence</td>
 </tr>
 <tr>
 <td align="left"><code>clinvar_disease_submissions</code></td>
 <td align="left">SCV evidence grouped by disease</td>
 </tr>
 <tr>
-<td align="left"><code>clinvar_policy_decisions</code></td>
-<td align="left">disease-level ClinVarbitration decisions</td>
+<td align="left">
+<code>clinvar_policy_decisions</code>, <code>clinvar_policy_allele_decisions</code>
+</td>
+<td align="left">disease- and allele-level arbitration</td>
 </tr>
 <tr>
-<td align="left"><code>clinvar_policy_allele_decisions</code></td>
-<td align="left">allele-level ClinVarbitration decisions</td>
+<td align="left"><code>clinvar_gene_summaries</code></td>
+<td align="left">policy-versioned disease/classification counts by gene</td>
+</tr>
+<tr>
+<td align="left">
+<code>clinvar_hpo_terms</code>, <code>clinvar_literature_links</code>
+</td>
+<td align="left">normalized phenotype and literature links</td>
+</tr>
+<tr>
+<td align="left"><code>clinvar_semantic_documents</code></td>
+<td align="left">attributable text documents for retrieval workflows</td>
 </tr>
 </tbody>
 </table>
-<p>See the <a href="https://sounkou-bioinfo.github.io/RClinVarbitration/reference/index.html">function reference</a> for the complete schema and API.</p>
+<p>Read the <a href="https://sounkou-bioinfo.github.io/RClinVarbitration/articles/arbitration-algorithm.html">arbitration algorithm</a>, <a href="https://sounkou-bioinfo.github.io/RClinVarbitration/articles/storage-cache-and-performance.html">storage and caching guide</a>, and <a href="https://sounkou-bioinfo.github.io/RClinVarbitration/articles/semantic-ducklake-variantstory.html">semantic/DuckLake/VariantStory integration</a>. The <a href="https://github.com/sounkou-bioinfo/RClinVarbitration/blob/main/docs/ERRATA.md" class="external-link">deviation and differential audit</a> records known differences from upstream ClinVarbitration and ClinVar.</p>
+<p>A measured complete 2026-07-02 release (5.42 GiB compressed XML) imported in 21 minutes 52.5 seconds and produced a 22.33-GiB physical DuckDB file. The storage guide reports hardware, row counts, peak memory, and the used/free block split behind that physical high-water size.</p>
 </div>
 <div class="section level2">
 <h2 id="submitter-exclusions">Submitter exclusions<a class="anchor" aria-label="anchor" href="#submitter-exclusions"></a>
 </h2>
 <p>Imports retain all source submissions. Exclusions are parameters of decision export, so the evidence remains available for audit and alternative policies. Names are matched case-insensitively after trimming whitespace.</p>
-<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">out</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempfile</a></span><span class="op">(</span>fileext <span class="op">=</span> <span class="st">".parquet"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="reference/rclinvarbitration_export_clinvarbitration_parquet.html">rclinvarbitration_export_clinvarbitration_parquet</a></span><span class="op">(</span></span>
 <span>  <span class="va">con</span>,</span>
@@ -204,17 +248,15 @@
 </tbody>
 </table>
 <p>The shared decision rules include the 2016 ACMG date filter, classification bins, 60/20 majority rule, strong-review precedence, and star calculation. The XML-derived Parquet export has the upstream seven-column decision schema, but is not expected to be byte-identical because its source and grouping differ.</p>
-<p>For the closest algorithm-level comparison, use the archived NCBI flat files:</p>
-<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="reference/rclinvarbitration_reproduce_clinvarbitration_parquet.html">rclinvarbitration_reproduce_clinvarbitration_parquet</a></span><span class="op">(</span></span>
-<span>  <span class="va">con</span>,</span>
-<span>  submission_path <span class="op">=</span> <span class="st">"submission_summary_YYYY-MM.txt.gz"</span>,</span>
-<span>  variant_path <span class="op">=</span> <span class="st">"variant_summary_YYYY-MM.txt.gz"</span>,</span>
-<span>  path <span class="op">=</span> <span class="st">"clinvar_decisions.parquet"</span>,</span>
-<span>  assembly <span class="op">=</span> <span class="st">"GRCh38"</span>,</span>
-<span>  submitter_exclusions <span class="op">=</span> <span class="st">"example laboratory"</span></span>
-<span><span class="op">)</span></span></code></pre></div>
+<p>The archived-flat-file reproducer is retained only as a differential-validation utility; it is redundant for ordinary XML imports. An exact-input execution of the pinned upstream Python TSV stage and this package’s flat reproducer over the complete March 2026 archives produced the same 4,125,389 keys with zero classification or star differences. Input, code, configuration, and output digests are in the <a href="https://github.com/sounkou-bioinfo/RClinVarbitration/blob/main/inst/audits/march-2026-flat-exact-oracle.dcf" class="external-link">oracle manifest</a>.</p>
+<p>The independently matched XML/flat audit classified every one of the 16 shared value differences and 361 key-set differences with source-row receipts. Most come from NCBI flat rows whose classification is <code>-</code> while XML carries a current classification; the remainder are one duplicate-SCV identity case, five source vocabulary differences, and two nested compound alleles. The <a href="https://github.com/sounkou-bioinfo/RClinVarbitration/blob/main/docs/ERRATA.md" class="external-link">ERRATA audit</a> contains the full counts and receipts. A published Zenodo release with 16,865 reference-only keys used an unpinned source snapshot; it is not the exact-input conformance result.</p>
 <p>One deliberate edge-case difference is that RClinVarbitration applies the qualified Illumina benign exclusion declared by upstream. At the pinned commit, the Python implementation’s inner-loop <code>continue</code> does not actually remove that submission, so compatibility here follows the documented policy rather than that implementation accident.</p>
+</div>
+<div class="section level2">
+<h2 id="evidence-retrieval-and-reanalysis">Evidence retrieval and reanalysis<a class="anchor" aria-label="anchor" href="#evidence-retrieval-and-reanalysis"></a>
+</h2>
+<p>A second motivation is to make ClinVar’s attributable evidence reusable, not only to annotate known alleles. Submission descriptions, comments, HPO links, gene relations, and publication identifiers can support semantic retrieval, dynamic gene-panel proposals, and evidence review for VUS or novel variants. The package provides joinable views for <a href="https://github.com/sounkou-bioinfo/ducksemantics" class="external-link"><code>ducksemantics</code></a>, DuckLake release history, and the source-observation model planned by <a href="https://github.com/sounkou-bioinfo/VariantStory" class="external-link"><code>VariantStory</code></a>.</p>
+<p>These workflows retrieve and rank evidence; an embedding neighbor does not classify a variant. Provider identity, release, source rows, deterministic evidence admission, and human review must remain explicit.</p>
 </div>
 <div class="section level2">
 <h2 id="acknowledgements">Acknowledgements<a class="anchor" aria-label="anchor" href="#acknowledgements"></a>

@@ -7,7 +7,7 @@ release.
 ## Usage
 
 ``` r
-rclinvarbitration_extension_path(duckdb_version = NULL)
+rclinvarbitration_extension_path(duckdb_version = NULL, duckdb_platform = NULL)
 ```
 
 ## Arguments
@@ -16,6 +16,13 @@ rclinvarbitration_extension_path(duckdb_version = NULL)
 
   Exact DuckDB version, with or without a `v` prefix. `NULL` selects the
   version reported by the installed `duckdb` package.
+
+- duckdb_platform:
+
+  Exact platform reported by `PRAGMA platform`. `NULL` queries a
+  temporary connection to the installed `duckdb` package. DuckDB
+  distinguishes `windows_amd64` from R-devel's `windows_amd64_mingw`
+  even though both artifacts contain the same MinGW-built machine code.
 
 ## Value
 

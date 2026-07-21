@@ -27,7 +27,16 @@ completion, and failed imports remove partial rows for release_id."></head><body
     </button>
 
     <div id="navbar" class="collapse navbar-collapse ms-3">
-      <ul class="navbar-nav me-auto"><li class="active nav-item"><a class="nav-link" href="../reference/index.html">Reference</a></li>
+      <ul class="navbar-nav me-auto"><li class="nav-item dropdown">
+  <button class="nav-link dropdown-toggle" type="button" id="dropdown-articles" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Articles</button>
+  <ul class="dropdown-menu" aria-labelledby="dropdown-articles"><li><hr class="dropdown-divider"></li>
+    <li><h6 class="dropdown-header" data-toc-skip>Concepts and integrations</h6></li>
+    <li><a class="dropdown-item" href="../articles/arbitration-algorithm.html">ClinVarbitration arbitration algorithm</a></li>
+    <li><a class="dropdown-item" href="../articles/storage-cache-and-performance.html">Storage, caching, and full-release performance</a></li>
+    <li><a class="dropdown-item" href="../articles/semantic-ducklake-variantstory.html">Semantic retrieval, DuckLake, and VariantStory</a></li>
+  </ul></li>
+<li class="active nav-item"><a class="nav-link" href="../reference/index.html">Reference</a></li>
+<li class="nav-item"><a class="external-link nav-link" href="https://github.com/sounkou-bioinfo/RClinVarbitration/blob/main/docs/ERRATA.md">Errata</a></li>
 <li class="nav-item"><a class="nav-link" href="../news/index.html">Changelog</a></li>
       </ul><ul class="navbar-nav"><li class="nav-item"><form class="form-inline" role="search">
  <input class="form-control" type="search" name="search-input" id="search-input" autocomplete="off" aria-label="Search site" placeholder="Search for" data-search-index="../search.json"></form></li>
@@ -57,7 +66,14 @@ completion, and failed imports remove partial rows for <code>release_id</code>.<
 
     <div class="section level2">
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">rclinvarbitration_import_xml</span><span class="op">(</span><span class="va">con</span>, <span class="va">path</span>, <span class="va">release_id</span>, replace <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span></code></pre></div>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">rclinvarbitration_import_xml</span><span class="op">(</span></span>
+<span>  <span class="va">con</span>,</span>
+<span>  <span class="va">path</span>,</span>
+<span>  <span class="va">release_id</span>,</span>
+<span>  replace <span class="op">=</span> <span class="cn">FALSE</span>,</span>
+<span>  source_url <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  source_md5 <span class="op">=</span> <span class="cn">NULL</span></span>
+<span><span class="op">)</span></span></code></pre></div>
     </div>
 
     <div class="section level2">
@@ -78,6 +94,17 @@ completion, and failed imports remove partial rows for <code>release_id</code>.<
 
 <dt id="arg-replace">replace<a class="anchor" aria-label="anchor" href="#arg-replace"></a></dt>
 <dd><p>Replace rows already stored for <code>release_id</code>?</p></dd>
+
+
+<dt id="arg-source-url">source_url<a class="anchor" aria-label="anchor" href="#arg-source-url"></a></dt>
+<dd><p>Optional source URL for the release catalogue. When <code>path</code>
+is returned directly by <code><a href="rclinvarbitration_download_clinvar.html">rclinvarbitration_download_clinvar()</a></code>, its download
+metadata supplies this value automatically.</p></dd>
+
+
+<dt id="arg-source-md-">source_md5<a class="anchor" aria-label="anchor" href="#arg-source-md-"></a></dt>
+<dd><p>Optional 32-character source MD5 digest. Download metadata
+is used automatically when available.</p></dd>
 
 </dl></div>
     <div class="section level2">

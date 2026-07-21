@@ -8,9 +8,40 @@
   submissions.
 
 - Replace the full-release executable README with a concise quick start
-  and an explicit comparison with upstream ClinVarbitration. Clarify
-  that native Windows builds remain unsupported while webR uses a
-  separate Emscripten path.
+  and an explicit comparison with upstream ClinVarbitration.
+
+- Add native x86-64 Windows extension builds using Rtools-provided
+  libxml2, zlib, and target-aware `pkg-config`; retain Linux, macOS, and
+  webR builds. Runtime artifact selection now matches exact DuckDB
+  platform metadata and includes both `windows_amd64` and R-devel’s
+  `windows_amd64_mingw` identities.
+
+- Add
+  [`rclinvarbitration_download_clinvar()`](https://sounkou-bioinfo.github.io/RClinVarbitration/reference/rclinvarbitration_download_clinvar.md)
+  for checksum-validated current or monthly archived VCV XML downloads
+  and optional flat-file validation inputs. Download URL, digest, and
+  source byte size can flow into the release catalogue.
+
+- Add `clinvar_hpo_terms`, `clinvar_literature_links`,
+  `clinvar_semantic_documents`, and disease-aware
+  `clinvar_gene_summaries` for semantic retrieval, gene panels,
+  literature review, DuckLake publication, and VariantStory integration.
+
+- Add pkgdown vignettes for the complete arbitration algorithm,
+  storage/cache lifecycle and measured full-release performance, and
+  semantic/DuckLake/ VariantStory integration. Add a rendered
+  `docs/ERRATA.md` audit of intentional deviations and observed
+  XML/flat/upstream differentials.
+
+- Execute the pinned upstream TSV algorithm on exact March 2026 flat
+  inputs: all 4,125,389 keys and values match the package reproducer.
+  Classify all 377 XML/flat key or value differences with source-row
+  receipts, and quantify sample/method/observed-data/consequence XML
+  structure coverage.
+
+- Add release-differential tests for disease keys, SCV replacement,
+  withdrawn assertions, compound alleles, and mitochondrial locations,
+  plus curated real HPO and PubMed context projections.
 
 - Add experimental webR/WebAssembly support. The package now builds its
   version-matched DuckDB extension as an Emscripten side module and has
@@ -56,9 +87,9 @@
   submitter-blinding profiles, and `clinvar_policy_pathogenic_alleles`
   as the disease-specific P/LP join surface for Rduckhts/DuckHTS.
 
-- Require README execution against the complete official VCV XML.GZ in
-  one file-backed import; all displayed summaries query that persisted
-  import and never rescan XML.
+- Execute the README quick start against the bundled real VCV fixture.
+  The separately receipted full-release benchmark remains file-backed
+  and does not rerun during README rendering.
 
 ## RClinVarbitration 0.1.0
 

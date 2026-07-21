@@ -1,7 +1,9 @@
 # Package index
 
-## Connection and import
+## Connection, download, and import
 
+- [`rclinvarbitration_download_clinvar()`](https://sounkou-bioinfo.github.io/RClinVarbitration/reference/rclinvarbitration_download_clinvar.md)
+  : Download official ClinVar source files
 - [`rclinvarbitration_extension_path()`](https://sounkou-bioinfo.github.io/RClinVarbitration/reference/rclinvarbitration_extension_path.md)
   : Locate a version-matched RClinVarbitration DuckDB extension
 - [`rclinvarbitration_enable()`](https://sounkou-bioinfo.github.io/RClinVarbitration/reference/rclinvarbitration_enable.md)
