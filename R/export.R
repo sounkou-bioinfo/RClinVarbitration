@@ -1,4 +1,26 @@
-rclinvarbitration_compatibility_select_sql <- function(release_sql, assembly_sql, profile_sql) {
+rclinvarbitration_validate_profile <- function(con, profile_id) {
+  version_sql <- rclinvarbitration_sql_string(rclinvarbitration_policy_version())
+  profile_sql <- rclinvarbitration_sql_string(profile_id)
+  n_profile <- DBI::dbGetQuery(
+    con,
+    paste0(
+      "SELECT count(*) AS n FROM clinvar_policy_profiles WHERE policy_version = ",
+      version_sql, " AND profile_id = ", profile_sql
+    )
+  )$n[[1L]]
+  if (n_profile != 1) {
+    stop("`profile_id` is not a configured ClinVarbitration policy profile.", call. = FALSE)
+  }
+  invisible(NULL)
+}
+
+rclinvarbitration_compatibility_select_sql <- function(
+    release_sql, assembly_sql, profile_sql, policy_query = NULL) {
+  policy_source <- if (is.null(policy_query)) {
+    "clinvar_policy_allele_decisions p "
+  } else {
+    paste0("(", policy_query, ") p ")
+  }
   paste0(
     "SELECT DISTINCT ",
     "CASE WHEN l.assembly = 'GRCh38' THEN ",
@@ -8,7 +30,7 @@ rclinvarbitration_compatibility_select_sql <- function(release_sql, assembly_sql
     "l.reference_allele_vcf AS reference, l.alternate_allele_vcf AS alternate, ",
     "p.policy_classification AS clinical_significance, ",
     "cast(p.gold_stars AS INTEGER) AS gold_stars, cast(p.allele_id AS INTEGER) AS allele_id ",
-    "FROM clinvar_policy_allele_decisions p ",
+    "FROM ", policy_source,
     "JOIN clinvar_alleles a ON a.release_id = p.release_id ",
     "AND a.vcv_accession = p.vcv_accession AND a.allele_id = p.allele_id ",
     "AND a.parent_allele_entity_id IS NULL ",
@@ -50,10 +72,15 @@ rclinvarbitration_compatibility_select_sql <- function(release_sql, assembly_sql
 #' @param release_id Imported ClinVar release label to export.
 #' @param assembly Genome assembly: `"GRCh38"` or `"GRCh37"`.
 #' @param profile_id Policy profile identifier, normally `"default"`.
+#' @param submitter_exclusions Additional submitter names to exclude from this
+#'   export. Matching is case-insensitive and ignores surrounding whitespace.
+#'   These exclusions are combined with any exclusions already stored for
+#'   `profile_id`; imported source submissions are not deleted.
 #' @return A named list describing the written Parquet file, invisibly.
 #' @export
 rclinvarbitration_export_clinvarbitration_parquet <- function(
-    con, path, release_id, assembly = c("GRCh38", "GRCh37"), profile_id = "default") {
+    con, path, release_id, assembly = c("GRCh38", "GRCh37"), profile_id = "default",
+    submitter_exclusions = character()) {
   if (!is.character(path) || length(path) != 1L || is.na(path) || !nzchar(path)) {
     stop("`path` must be a non-empty output file path.", call. = FALSE)
   }
@@ -63,6 +90,7 @@ rclinvarbitration_export_clinvarbitration_parquet <- function(
   if (!is.character(profile_id) || length(profile_id) != 1L || is.na(profile_id) || !nzchar(profile_id)) {
     stop("`profile_id` must be a non-empty character scalar.", call. = FALSE)
   }
+  submitter_exclusions <- rclinvarbitration_normalize_submitter_exclusions(submitter_exclusions)
   assembly <- match.arg(assembly)
   path <- normalizePath(path, mustWork = FALSE)
   if (!dir.exists(dirname(path))) {
@@ -73,7 +101,6 @@ rclinvarbitration_export_clinvarbitration_parquet <- function(
   }
 
   release_sql <- rclinvarbitration_sql_string(release_id)
-  profile_sql <- rclinvarbitration_sql_string(profile_id)
   assembly_sql <- rclinvarbitration_sql_string(assembly)
   n_release <- DBI::dbGetQuery(
     con,
@@ -83,10 +110,27 @@ rclinvarbitration_export_clinvarbitration_parquet <- function(
     stop("`release_id` is not an imported ClinVar release.", call. = FALSE)
   }
 
+  rclinvarbitration_validate_profile(con, profile_id)
+  profile_sql <- rclinvarbitration_sql_string(profile_id)
+  policy_query <- if (length(submitter_exclusions)) {
+    exclusion_sql <- paste(
+      rclinvarbitration_sql_string(submitter_exclusions), collapse = ", "
+    )
+    rclinvarbitration_allele_policy_query(
+      rclinvarbitration_policy_version(),
+      profile_predicate = paste0("p.profile_id = ", profile_sql),
+      submitter_exclusion_predicate = paste0(
+        "c.submitter_normalized NOT IN (", exclusion_sql, ")"
+      )
+    )
+  } else {
+    NULL
+  }
   select_sql <- rclinvarbitration_compatibility_select_sql(
     release_sql = release_sql,
     assembly_sql = assembly_sql,
-    profile_sql = profile_sql
+    profile_sql = profile_sql,
+    policy_query = policy_query
   )
   n_rows <- DBI::dbGetQuery(con, paste0("SELECT count(*) AS n FROM (", select_sql, ")"))$n[[1L]]
   DBI::dbExecute(
@@ -103,6 +147,7 @@ rclinvarbitration_export_clinvarbitration_parquet <- function(
     release_id = release_id,
     assembly = assembly,
     profile_id = profile_id,
+    submitter_exclusions = submitter_exclusions,
     policy_version = rclinvarbitration_policy_version()
   ))
 }

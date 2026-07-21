@@ -161,6 +161,45 @@ expect_error(
 )
 unlink(parquet)
 
+blinded_parquet <- tempfile("clinvar-decisions-blinded-", fileext = ".parquet")
+submitters <- unique(scvs$submitter_name)
+policy_version_sql <- DBI::dbQuoteString(con, rclinvarbitration_policy_version())
+DBI::dbExecute(con, paste0(
+  "INSERT INTO clinvar_policy_profiles VALUES (", policy_version_sql,
+  ", 'combined-exclusions', 'test profile')"
+))
+DBI::dbExecute(con, paste0(
+  "INSERT INTO clinvar_policy_submitter_exclusions VALUES (", policy_version_sql,
+  ", 'combined-exclusions', ", DBI::dbQuoteString(con, submitters[[1L]]),
+  ", NULL, 'stored exclusion')"
+))
+profile_count <- DBI::dbGetQuery(con, "SELECT count(*) AS n FROM clinvar_policy_profiles")$n
+exclusion_count <- DBI::dbGetQuery(
+  con, "SELECT count(*) AS n FROM clinvar_policy_submitter_exclusions"
+)$n
+blinded_export <- rclinvarbitration_export_clinvarbitration_parquet(
+  con, blinded_parquet, release_id = "fixture-vcv", assembly = "GRCh38",
+  profile_id = "combined-exclusions", submitter_exclusions = submitters[-1L]
+)
+expect_equal(blinded_export$rows, 0)
+expect_equal(
+  sort(blinded_export$submitter_exclusions),
+  sort(unique(tolower(submitters[-1L])))
+)
+expect_equal(
+  DBI::dbGetQuery(con, paste0(
+    "SELECT count(*) AS n FROM read_parquet(",
+    DBI::dbQuoteString(con, blinded_parquet), ")"
+  ))$n,
+  0
+)
+expect_equal(DBI::dbGetQuery(con, "SELECT count(*) AS n FROM clinvar_policy_profiles")$n, profile_count)
+expect_equal(
+  DBI::dbGetQuery(con, "SELECT count(*) AS n FROM clinvar_policy_submitter_exclusions")$n,
+  exclusion_count
+)
+unlink(blinded_parquet)
+
 write_gzip_lines <- function(path, lines) {
   output <- gzfile(path, "wt")
   on.exit(close(output), add = TRUE)

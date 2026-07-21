@@ -13,12 +13,21 @@ rclinvarbitration_policy_version <- function() {
   "cpg-clinvarbitration-2.2.11"
 }
 
+rclinvarbitration_normalize_submitter_exclusions <- function(submitter_exclusions) {
+  if (!is.character(submitter_exclusions) || anyNA(submitter_exclusions)) {
+    stop("`submitter_exclusions` must be a character vector without missing values.", call. = FALSE)
+  }
+  exclusions <- tolower(trimws(submitter_exclusions))
+  unique(exclusions[nzchar(exclusions)])
+}
+
 #' ClinVarbitration policy SQL
 #'
 #' Returns DuckDB views implementing the supported policy over
 #' `clinvar_disease_submissions`. The policy bins submitted classifications,
-#' excludes unknown bins and the upstream qualified Illumina benign exclusion,
-#' optionally applies profile-specific submitter exclusions, prefers evidence
+#' excludes unknown bins and applies the upstream policy's intended qualified
+#' Illumina benign exclusion, optionally applies profile-specific submitter
+#' exclusions, prefers evidence
 #' evaluated from 2016 onward while always retaining expert-panel and practice
 #' guideline evidence, and applies the 60/20 majority rule. The disease-level
 #' and allele-level views both reproduce the upstream strong-review rule: the
@@ -150,7 +159,16 @@ rclinvarbitration_policy_sql <- function(
 
 rclinvarbitration_allele_policy_sql <- function(policy_version) {
   paste(
-    "CREATE OR REPLACE VIEW clinvar_policy_allele_decisions AS WITH classified AS (",
+    "CREATE OR REPLACE VIEW clinvar_policy_allele_decisions AS",
+    rclinvarbitration_allele_policy_query(policy_version)
+  )
+}
+
+rclinvarbitration_allele_policy_query <- function(
+    policy_version, profile_predicate = "TRUE",
+    submitter_exclusion_predicate = "TRUE") {
+  paste(
+    "WITH classified AS (",
     "SELECT p.policy_version, p.profile_id, s.release_id, s.vcv_accession,",
     "v.variation_id, a.allele_id, s.assertion_entity_id, s.scv_accession,",
     "s.scv_version, s.assertion_id, s.source_ordinal, s.submitter_name, s.classification,",
@@ -171,7 +189,9 @@ rclinvarbitration_allele_policy_sql <- function(policy_version) {
     "LEFT JOIN clinvar_alleles a ON a.release_id = s.release_id",
     "AND a.vcv_accession = s.vcv_accession AND a.parent_allele_entity_id IS NULL",
     "JOIN clinvar_policy_profiles p",
-    paste0("ON p.policy_version = '", policy_version, "'),"),
+    paste0(
+      "ON p.policy_version = '", policy_version, "' AND ", profile_predicate, "),"
+    ),
     "eligible AS (SELECT c.* FROM classified c WHERE c.classification_bin <> 'Unknown'",
     "AND NOT (c.classification_bin = 'Benign'",
     "AND c.submitter_normalized = 'illumina laboratory services; illumina')",
@@ -179,7 +199,8 @@ rclinvarbitration_allele_policy_sql <- function(policy_version) {
     "WHERE e.policy_version = c.policy_version AND e.profile_id = c.profile_id",
     "AND lower(trim(e.submitter_name)) = c.submitter_normalized",
     "AND (e.classification_bin IS NULL",
-    "OR lower(trim(e.classification_bin)) = lower(c.classification_bin)))),",
+    "OR lower(trim(e.classification_bin)) = lower(c.classification_bin)))",
+    "AND", submitter_exclusion_predicate, "),",
     "deduplicated AS (SELECT * FROM eligible QUALIFY row_number() OVER (",
     "PARTITION BY policy_version, profile_id, release_id, vcv_accession, allele_id,",
     "assertion_entity_id ORDER BY scv_version DESC NULLS LAST, assertion_id NULLS LAST) = 1),",

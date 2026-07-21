@@ -124,9 +124,7 @@ rclinvarbitration_reproduce_clinvarbitration_parquet <- function(
   if (!is.character(path) || length(path) != 1L || is.na(path) || !nzchar(path)) {
     stop("`path` must be a non-empty output file path.", call. = FALSE)
   }
-  if (!is.character(submitter_exclusions) || anyNA(submitter_exclusions)) {
-    stop("`submitter_exclusions` must be a character vector without missing values.", call. = FALSE)
-  }
+  excluded_submitters <- rclinvarbitration_normalize_submitter_exclusions(submitter_exclusions)
   assembly <- match.arg(assembly)
   path <- normalizePath(path, mustWork = FALSE)
   if (!dir.exists(dirname(path))) {
@@ -136,7 +134,6 @@ rclinvarbitration_reproduce_clinvarbitration_parquet <- function(
     stop("`path` already exists; refuse to overwrite it.", call. = FALSE)
   }
 
-  excluded_submitters <- unique(tolower(trimws(submitter_exclusions)))
   submitter_exclusion_predicate <- if (length(excluded_submitters)) {
     paste0(
       "submitter_normalized NOT IN (",
@@ -166,7 +163,7 @@ rclinvarbitration_reproduce_clinvarbitration_parquet <- function(
     path = path,
     rows = n_rows,
     assembly = assembly,
-    submitter_exclusions = submitter_exclusions,
+    submitter_exclusions = excluded_submitters,
     policy_version = rclinvarbitration_policy_version()
   ))
 }

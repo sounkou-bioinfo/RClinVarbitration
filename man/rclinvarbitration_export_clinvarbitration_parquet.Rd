@@ -9,7 +9,8 @@ rclinvarbitration_export_clinvarbitration_parquet(
   path,
   release_id,
   assembly = c("GRCh38", "GRCh37"),
-  profile_id = "default"
+  profile_id = "default",
+  submitter_exclusions = character()
 )
 }
 \arguments{
@@ -23,6 +24,11 @@ rclinvarbitration_export_clinvarbitration_parquet(
 \item{assembly}{Genome assembly: \code{"GRCh38"} or \code{"GRCh37"}.}
 
 \item{profile_id}{Policy profile identifier, normally \code{"default"}.}
+
+\item{submitter_exclusions}{Additional submitter names to exclude from this
+export. Matching is case-insensitive and ignores surrounding whitespace.
+These exclusions are combined with any exclusions already stored for
+\code{profile_id}; imported source submissions are not deleted.}
 }
 \value{
 A named list describing the written Parquet file, invisibly.

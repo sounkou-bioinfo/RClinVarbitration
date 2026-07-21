@@ -1,5 +1,12 @@
 # RClinVarbitration 0.1.1
 
+- Add `submitter_exclusions` to the XML-derived Parquet exporter. Direct
+  exclusions are normalized case-insensitively, combined with a selected named
+  profile, and applied without deleting imported source submissions.
+- Replace the full-release executable README with a concise quick start and an
+  explicit comparison with upstream ClinVarbitration. Clarify that native
+  Windows builds remain unsupported while webR uses a separate Emscripten path.
+
 - Add experimental webR/WebAssembly support. The package now builds its
   version-matched DuckDB extension as an Emscripten side module and has a
   browser smoke test that loads it and imports the compressed VCV fixture.
