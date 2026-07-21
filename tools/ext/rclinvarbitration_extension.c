@@ -8,6 +8,7 @@
 #include "duckdb_extension.h"
 
 #include <libxml/xmlreader.h>
+#include <zlib.h>
 
 #include <ctype.h>
 #include <stdbool.h>
@@ -88,6 +89,27 @@ typedef struct rclinvar_scan_state {
     int finished;
     char error[RCLINVAR_ERROR_SIZE];
 } rclinvar_scan_state_t;
+
+static int rclinvar_is_gzip_path(const char *path) {
+    size_t length;
+    if (!path) return 0;
+    length = strlen(path);
+    return length >= 3U && path[length - 3U] == '.' &&
+           tolower((unsigned char)path[length - 2U]) == 'g' &&
+           tolower((unsigned char)path[length - 1U]) == 'z';
+}
+
+static int rclinvar_gzip_read(void *context, char *buffer, int length) {
+    int read_count;
+    if (!context || !buffer || length < 0) return -1;
+    read_count = gzread((gzFile)context, buffer, (unsigned int)length);
+    return read_count < 0 ? -1 : read_count;
+}
+
+static int rclinvar_gzip_close(void *context) {
+    if (!context) return 0;
+    return gzclose((gzFile)context) == Z_OK ? 0 : -1;
+}
 
 static char *rclinvar_strdup(const char *text) {
     size_t n;
@@ -267,6 +289,128 @@ static char *rclinvar_fields_json(const rclinvar_stack_entry_t *entry) {
     *out++ = '}';
     *out = '\0';
     return json;
+}
+
+static int rclinvar_json_hex_digit(char character) {
+    if (character >= '0' && character <= '9') return character - '0';
+    if (character >= 'a' && character <= 'f') return character - 'a' + 10;
+    if (character >= 'A' && character <= 'F') return character - 'A' + 10;
+    return -1;
+}
+
+/* The parser owns fields_json and always writes a compact object of string
+ * values. This deliberately small decoder is not a general JSON API: it
+ * extracts one ASCII field name and decodes the string escapes emitted by
+ * rclinvar_json_escape_into(). Keeping it here avoids requiring DuckDB's
+ * downloadable JSON extension, which is unavailable in browser/webR runtimes.
+ */
+static char *rclinvar_json_field_value(const char *json, size_t json_length,
+                                       const char *key, size_t key_length,
+                                       size_t *value_length) {
+    size_t position = 0;
+    if (!json || !key || !value_length || json_length < 2U || json[position++] != '{') return NULL;
+    while (position < json_length && json[position] != '}') {
+        size_t field_start;
+        size_t field_end;
+        size_t encoded_value_start;
+        if (json[position] != '"') return NULL;
+        field_start = ++position;
+        while (position < json_length) {
+            if (json[position] == '\\') {
+                position += 2U;
+            } else if (position < json_length && json[position] == '"') {
+                break;
+            } else {
+                position++;
+            }
+        }
+        if (position >= json_length) return NULL;
+        field_end = position++;
+        if (position >= json_length || json[position++] != ':') return NULL;
+        if (position >= json_length || json[position++] != '"') return NULL;
+        encoded_value_start = position;
+        if (field_end - field_start == key_length &&
+            memcmp(json + field_start, key, key_length) == 0) {
+            char *value = (char *)malloc(json_length - encoded_value_start + 1U);
+            char *out;
+            if (!value) return NULL;
+            out = value;
+            while (position < json_length) {
+                char character = json[position++];
+                if (character == '"') {
+                    *out = '\0';
+                    *value_length = (size_t)(out - value);
+                    return value;
+                }
+                if (character != '\\') {
+                    *out++ = character;
+                    continue;
+                }
+                if (position >= json_length) break;
+                character = json[position++];
+                switch (character) {
+                case '"': *out++ = '"'; break;
+                case '\\': *out++ = '\\'; break;
+                case '/': *out++ = '/'; break;
+                case 'b': *out++ = '\b'; break;
+                case 'f': *out++ = '\f'; break;
+                case 'n': *out++ = '\n'; break;
+                case 'r': *out++ = '\r'; break;
+                case 't': *out++ = '\t'; break;
+                case 'u': {
+                    int first;
+                    int second;
+                    int third;
+                    int fourth;
+                    unsigned int codepoint;
+                    if (position + 4U > json_length) {
+                        free(value);
+                        return NULL;
+                    }
+                    first = rclinvar_json_hex_digit(json[position]);
+                    second = rclinvar_json_hex_digit(json[position + 1U]);
+                    third = rclinvar_json_hex_digit(json[position + 2U]);
+                    fourth = rclinvar_json_hex_digit(json[position + 3U]);
+                    if (first < 0 || second < 0 || third < 0 || fourth < 0) {
+                        free(value);
+                        return NULL;
+                    }
+                    position += 4U;
+                    codepoint = ((unsigned int)first << 12U) | ((unsigned int)second << 8U) |
+                                ((unsigned int)third << 4U) | (unsigned int)fourth;
+                    if (codepoint <= 0x7fU) {
+                        *out++ = (char)codepoint;
+                    } else if (codepoint <= 0x7ffU) {
+                        *out++ = (char)(0xc0U | (codepoint >> 6U));
+                        *out++ = (char)(0x80U | (codepoint & 0x3fU));
+                    } else {
+                        *out++ = (char)(0xe0U | (codepoint >> 12U));
+                        *out++ = (char)(0x80U | ((codepoint >> 6U) & 0x3fU));
+                        *out++ = (char)(0x80U | (codepoint & 0x3fU));
+                    }
+                    break;
+                }
+                default:
+                    free(value);
+                    return NULL;
+                }
+            }
+            free(value);
+            return NULL;
+        }
+        while (position < json_length) {
+            if (json[position] == '\\') {
+                position += 2U;
+            } else if (json[position] == '"') {
+                position++;
+                break;
+            } else {
+                position++;
+            }
+        }
+        if (position < json_length && json[position] == ',') position++;
+    }
+    return NULL;
 }
 
 static void rclinvar_entity_clear(rclinvar_entity_t *entity) {
@@ -895,7 +1039,18 @@ static void rclinvar_xml_init(duckdb_init_info info) {
         duckdb_init_set_error(info, "out of memory initializing ClinVar XML scan");
         return;
     }
-    state->reader = xmlReaderForFile(bind->path, NULL, XML_PARSE_NONET | XML_PARSE_COMPACT | XML_PARSE_NOENT);
+    if (rclinvar_is_gzip_path(bind->path)) {
+        gzFile input = gzopen(bind->path, "rb");
+        if (input) {
+            state->reader = xmlReaderForIO(
+                rclinvar_gzip_read, rclinvar_gzip_close, input, bind->path, NULL,
+                XML_PARSE_NONET | XML_PARSE_COMPACT | XML_PARSE_NOENT
+            );
+            if (!state->reader) gzclose(input);
+        }
+    } else {
+        state->reader = xmlReaderForFile(bind->path, NULL, XML_PARSE_NONET | XML_PARSE_COMPACT | XML_PARSE_NOENT);
+    }
     if (!state->reader) {
         rclinvar_scan_destroy(state);
         duckdb_init_set_error(info, "failed to open or parse ClinVar XML/XML.GZ input");
@@ -910,6 +1065,42 @@ static void rclinvar_set_null(duckdb_vector vector, idx_t row) {
     duckdb_vector_ensure_validity_writable(vector);
     validity = duckdb_vector_get_validity(vector);
     duckdb_validity_set_row_invalid(validity, row);
+}
+
+static void rclinvar_json_field_function(duckdb_function_info info, duckdb_data_chunk input,
+                                          duckdb_vector output) {
+    duckdb_vector fields_vector = duckdb_data_chunk_get_vector(input, 0U);
+    duckdb_vector keys_vector = duckdb_data_chunk_get_vector(input, 1U);
+    duckdb_string_t *fields = (duckdb_string_t *)duckdb_vector_get_data(fields_vector);
+    duckdb_string_t *keys = (duckdb_string_t *)duckdb_vector_get_data(keys_vector);
+    uint64_t *fields_validity = duckdb_vector_get_validity(fields_vector);
+    uint64_t *keys_validity = duckdb_vector_get_validity(keys_vector);
+    idx_t row;
+    idx_t row_count = duckdb_data_chunk_get_size(input);
+    (void)info;
+    for (row = 0; row < row_count; row++) {
+        char *value;
+        size_t value_length = 0;
+        const char *json;
+        const char *key;
+        if ((fields_validity && !duckdb_validity_row_is_valid(fields_validity, row)) ||
+            (keys_validity && !duckdb_validity_row_is_valid(keys_validity, row))) {
+            rclinvar_set_null(output, row);
+            continue;
+        }
+        json = duckdb_string_t_data(&fields[row]);
+        key = duckdb_string_t_data(&keys[row]);
+        value = rclinvar_json_field_value(
+            json, (size_t)duckdb_string_t_length(fields[row]),
+            key, (size_t)duckdb_string_t_length(keys[row]), &value_length
+        );
+        if (!value) {
+            rclinvar_set_null(output, row);
+            continue;
+        }
+        duckdb_vector_assign_string_element_len(output, row, value, (idx_t)value_length);
+        free(value);
+    }
 }
 
 static void rclinvar_assign_entity(duckdb_data_chunk output, idx_t row, rclinvar_entity_t *entity) {
@@ -969,6 +1160,27 @@ static void rclinvar_xml_function(duckdb_function_info info, duckdb_data_chunk o
     duckdb_data_chunk_set_size(output, count);
 }
 
+static bool rclinvar_register_json_field(duckdb_connection connection) {
+    duckdb_scalar_function function = duckdb_create_scalar_function();
+    duckdb_logical_type varchar_type;
+    duckdb_state status;
+    if (!function) return false;
+    varchar_type = duckdb_create_logical_type(DUCKDB_TYPE_VARCHAR);
+    if (!varchar_type) {
+        duckdb_destroy_scalar_function(&function);
+        return false;
+    }
+    duckdb_scalar_function_set_name(function, "rclinvar_json_field");
+    duckdb_scalar_function_add_parameter(function, varchar_type);
+    duckdb_scalar_function_add_parameter(function, varchar_type);
+    duckdb_scalar_function_set_return_type(function, varchar_type);
+    duckdb_scalar_function_set_function(function, rclinvar_json_field_function);
+    status = duckdb_register_scalar_function(connection, function);
+    duckdb_destroy_logical_type(&varchar_type);
+    duckdb_destroy_scalar_function(&function);
+    return status == DuckDBSuccess;
+}
+
 static bool rclinvar_register_xml_entities(duckdb_connection connection) {
     duckdb_table_function function = duckdb_create_table_function();
     duckdb_logical_type parameter_type;
@@ -994,6 +1206,10 @@ DUCKDB_EXTENSION_ENTRYPOINT(duckdb_connection connection,
                             duckdb_extension_info info,
                             struct duckdb_extension_access *access) {
     xmlInitParser();
+    if (!rclinvar_register_json_field(connection)) {
+        access->set_error(info, "failed to register rclinvar_json_field()");
+        return false;
+    }
     if (!rclinvar_register_xml_entities(connection)) {
         access->set_error(info, "failed to register clinvar_xml_entities()");
         return false;

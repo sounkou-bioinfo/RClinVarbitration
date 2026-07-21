@@ -15,12 +15,14 @@ con <- DBI::dbConnect(duckdb::duckdb(config = list(
 )))
 rclinvarbitration_enable(con)
 json_extension <- DBI::dbGetQuery(con, paste(
-  "SELECT installed, loaded, install_path FROM duckdb_extensions()",
-  "WHERE extension_name = 'json'"
+  "SELECT installed FROM duckdb_extensions() WHERE extension_name = 'json'"
 ))
-expect_true(json_extension$installed)
-expect_true(json_extension$loaded)
-expect_true(startsWith(json_extension$install_path, extension_directory))
+expect_false(json_extension$installed)
+escaped_json <- '{"value":"line\\nquote\\"slash\\\\"}'
+escaped_field <- DBI::dbGetQuery(con, paste0(
+  "SELECT rclinvar_json_field(", DBI::dbQuoteString(con, escaped_json), ", 'value') AS value"
+))$value
+expect_equal(escaped_field, "line\nquote\"slash\\")
 fixture_sql <- as.character(DBI::dbQuoteString(con, fixture))
 
 entities <- DBI::dbGetQuery(con, paste0(
@@ -36,8 +38,8 @@ expect_equal(sum(entities$entity_type == "scv_assertion"), 6L)
 expect_true(all(grepl("^\\{.*\\}$", entities$fields_json)))
 
 selected_fields <- DBI::dbGetQuery(con, paste0(
-  "SELECT entity_type, json_extract_string(fields_json, '$.classification') AS classification, ",
-  "json_extract_string(fields_json, '$.value') AS value ",
+  "SELECT entity_type, rclinvar_json_field(fields_json, 'classification') AS classification, ",
+  "rclinvar_json_field(fields_json, 'value') AS value ",
   "FROM clinvar_xml_entities(", fixture_sql, ")"
 ))
 expect_true(any(selected_fields$entity_type == "scv_assertion" & selected_fields$classification == "Pathogenic", na.rm = TRUE))

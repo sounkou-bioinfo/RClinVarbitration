@@ -28,7 +28,7 @@ jobs:
       - name: Install libxml2
         run: |
           sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends libxml2-dev pkg-config
+          sudo apt-get install --yes --no-install-recommends libxml2-dev zlib1g-dev pkg-config
 
       - uses: r-lib/actions/setup-pandoc@v2
 

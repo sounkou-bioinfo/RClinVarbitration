@@ -5,5 +5,8 @@
 .RData
 README.html
 docs/
+.webr-local-artifacts/
+node_modules/
+*.tgz
 .pi/
 inst/rclinvarbitration_extension/build/

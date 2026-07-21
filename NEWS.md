@@ -1,8 +1,12 @@
 # RClinVarbitration 0.1.1
 
-- Load DuckDB's official JSON extension through `rclinvarbitration_enable()`;
-  install it automatically when absent, with an actionable error when the
-  connection cannot download extensions.
+- Add experimental webR/WebAssembly support. The package now builds its
+  version-matched DuckDB extension as an Emscripten side module and has a
+  browser smoke test that loads it and imports the compressed VCV fixture.
+
+- Project compact parser rows with the package-owned `rclinvar_json_field()`
+  scalar rather than DuckDB's separately downloadable JSON extension. Imports
+  now require no extension download, including in browser/webR runtimes.
 
 - Remove the premature local `v1` policy suffix; preserve the pinned
   `cpg-clinvarbitration-2.2.11` identifier, source-order strong-review rule,

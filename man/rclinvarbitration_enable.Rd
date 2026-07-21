@@ -15,11 +15,9 @@ rclinvarbitration_enable(con, extension_path = NULL)
 \code{con}, invisibly.
 }
 \description{
-Loads the package-owned \code{rclinvarbitration} extension and DuckDB's official
-JSON extension. The latter is downloaded through DuckDB on first use when it
-is not already installed; JSON is required to project compact parser rows.
-Its native \code{clinvar_xml_entities(path)} table function is the compact,
-ClinVar-specific one-pass staging surface used by
+Loads the package-owned \code{rclinvarbitration} extension. Its native
+\code{clinvar_xml_entities(path)} table function and \code{rclinvar_json_field()}
+scalar are the compact, ClinVar-specific one-pass staging surface used by
 \code{\link[=rclinvarbitration_import_xml]{rclinvarbitration_import_xml()}}. The connection must have been created with
 \code{duckdb::duckdb(config = list(allow_unsigned_extensions = "true"))}, as for
 any locally built DuckDB extension.

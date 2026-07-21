@@ -27,8 +27,8 @@ for file in "$VERSIONS_FILE" "$SOURCE" "$METADATA"; do
   fi
 done
 
-if ! command -v pkg-config >/dev/null 2>&1 || ! pkg-config --exists libxml-2.0; then
-  echo "ERROR: RClinVarbitration requires libxml2 development headers and pkg-config" >&2
+if ! command -v pkg-config >/dev/null 2>&1 || ! pkg-config --exists libxml-2.0 || ! pkg-config --exists zlib; then
+  echo "ERROR: RClinVarbitration requires libxml2 and zlib development headers plus pkg-config" >&2
   exit 1
 fi
 
@@ -64,6 +64,8 @@ R_LDFLAGS=`"${R_HOME}/bin/R" CMD config LDFLAGS`
 CONFIGURE_LDFLAGS="${LDFLAGS:-}"
 XML_CFLAGS=`pkg-config --cflags libxml-2.0`
 XML_LIBS=`pkg-config --libs libxml-2.0`
+ZLIB_CFLAGS=`pkg-config --cflags zlib`
+ZLIB_LIBS=`pkg-config --libs zlib`
 
 WASM_BUILD=no
 if echo "$CC" | grep -q 'emcc\|wasm' || echo "$HOST_TRIPLET" | grep -q 'wasm\|emscripten'; then
@@ -108,12 +110,12 @@ for DUCKDB_VERSION in $BUILD_VERSIONS; do
   OUT_DIR="$BUILD_ROOT/$DUCKDB_VERSION"
   RAW="$OUT_DIR/rclinvarbitration.duckdb_extension.raw"
   FINAL="$OUT_DIR/rclinvarbitration.duckdb_extension"
-  CPPFLAGS="-DNDEBUG -DDUCKDB_EXTENSION_NAME=rclinvarbitration -DDUCKDB_EXTENSION_API_VERSION_UNSTABLE=$DUCKDB_VERSION -DDUCKDB_EXTENSION_API_UNSTABLE_VERSION=\"$DUCKDB_VERSION\" -I$HEADER_DIR $XML_CFLAGS"
+  CPPFLAGS="-DNDEBUG -DDUCKDB_EXTENSION_NAME=rclinvarbitration -DDUCKDB_EXTENSION_API_VERSION_UNSTABLE=$DUCKDB_VERSION -DDUCKDB_EXTENSION_API_UNSTABLE_VERSION=\"$DUCKDB_VERSION\" -I$HEADER_DIR $XML_CFLAGS $ZLIB_CFLAGS"
   mkdir -p "$OUT_DIR"
 
   echo "Building RClinVarbitration extension for DuckDB $DUCKDB_VERSION..."
   "$CC" $SHARED_FLAGS $CFLAGS $CPPFLAGS $R_LDFLAGS $CONFIGURE_LDFLAGS \
-    -o "$RAW" $EXT_EXPORT_FLAGS "$SOURCE" $XML_LIBS
+    -o "$RAW" $EXT_EXPORT_FLAGS "$SOURCE" $XML_LIBS $ZLIB_LIBS
   "${R_HOME}/bin/Rscript" "$METADATA" \
     --library-file "$RAW" \
     --out-file "$FINAL" \

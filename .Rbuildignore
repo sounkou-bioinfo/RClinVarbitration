@@ -9,5 +9,8 @@
 ^\.pi$
 ^README\.html$
 ^README\.Rmd$
+^scripts$
+^\.webr-local-artifacts$
+^node_modules$
 ^Makefile$
 ^inst/rclinvarbitration_extension/build($|/)

@@ -228,7 +228,7 @@ rclinvarbitration_entity_insert_sql <- function(table, entity_type, select_sql) 
 }
 
 rclinvarbitration_import_statements <- function(release_sql) {
-  field <- function(name) paste0("json_extract_string(fields_json, '$.", name, "')")
+  field <- function(name) paste0("rclinvar_json_field(fields_json, '", name, "')")
   c(
     variants = rclinvarbitration_entity_insert_sql(
       "clinvar_variants", "variation",
