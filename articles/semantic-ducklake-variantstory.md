@@ -54,7 +54,7 @@ WHERE gene_key = 'ncbigene:672';
 
 ## Using ducksemantics
 
-[`ducksemantics`](https://github.com/sounkou-bioinfo/ducksemantics) can
+[`ducksemantics`](https://github.com/RGenomicsETL/ducksemantics) can
 store HPO ontology structure and dense or late-interaction embeddings in
 DuckDB. The two packages can use one connection: RClinVarbitration owns
 ClinVar source semantics, while ducksemantics owns ontology and
@@ -212,8 +212,8 @@ support local single-release analysis.
 
 ## VariantStory boundary
 
-[`VariantStory`](https://github.com/sounkou-bioinfo/VariantStory)
-separates source observations, case-independent classification, case
+[`VariantStory`](https://github.com/RGenomicsETL/VariantStory) separates
+source observations, case-independent classification, case
 prioritization, evidence admission, and review. RClinVarbitration fits
 as a release-pinned supplementary-source adapter:
 

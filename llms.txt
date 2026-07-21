@@ -1,8 +1,8 @@
 # RClinVarbitration
 
-[![R-CMD-check](https://github.com/sounkou-bioinfo/RClinVarbitration/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/sounkou-bioinfo/RClinVarbitration/actions/workflows/R-CMD-check.yaml)
-[![pkgdown](https://github.com/sounkou-bioinfo/RClinVarbitration/actions/workflows/pkgdown.yaml/badge.svg)](https://sounkou-bioinfo.github.io/RClinVarbitration/)
-[![r-universe](https://sounkou-bioinfo.r-universe.dev/badges/:name)](https://sounkou-bioinfo.r-universe.dev/)
+[![R-CMD-check](https://github.com/RGenomicsETL/RClinVarbitration/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/RGenomicsETL/RClinVarbitration/actions/workflows/R-CMD-check.yaml)
+[![pkgdown](https://github.com/RGenomicsETL/RClinVarbitration/actions/workflows/pkgdown.yaml/badge.svg)](https://rgenomicsetl.github.io/RClinVarbitration/)
+[![r-universe](https://rgenomicsetl.r-universe.dev/badges/:name)](https://rgenomicsetl.r-universe.dev/)
 
 `RClinVarbitration` streams official ClinVar VCV XML/XML.GZ releases
 into relational DuckDB tables and derives ClinVarbitration-style
@@ -21,7 +21,7 @@ extensions.
 install.packages(
   "RClinVarbitration",
   repos = c(
-    sounkou = "https://sounkou-bioinfo.r-universe.dev",
+    rgenomicsetl = "https://rgenomicsetl.r-universe.dev",
     CRAN = "https://cloud.r-project.org"
   )
 )
@@ -104,13 +104,13 @@ The main query surfaces are:
 | `clinvar_semantic_documents` | attributable text documents for retrieval workflows |
 
 Read the [arbitration
-algorithm](https://sounkou-bioinfo.github.io/RClinVarbitration/articles/arbitration-algorithm.html),
+algorithm](https://rgenomicsetl.github.io/RClinVarbitration/articles/arbitration-algorithm.html),
 [storage and caching
-guide](https://sounkou-bioinfo.github.io/RClinVarbitration/articles/storage-cache-and-performance.html),
+guide](https://rgenomicsetl.github.io/RClinVarbitration/articles/storage-cache-and-performance.html),
 and [semantic/DuckLake/VariantStory
-integration](https://sounkou-bioinfo.github.io/RClinVarbitration/articles/semantic-ducklake-variantstory.html).
+integration](https://rgenomicsetl.github.io/RClinVarbitration/articles/semantic-ducklake-variantstory.html).
 The [deviation and differential
-audit](https://github.com/sounkou-bioinfo/RClinVarbitration/blob/main/docs/ERRATA.md)
+audit](https://github.com/RGenomicsETL/RClinVarbitration/blob/main/docs/ERRATA.md)
 records known differences from upstream ClinVarbitration and ClinVar.
 
 A measured complete 2026-07-02 release (5.42 GiB compressed XML)
@@ -170,7 +170,7 @@ stage and this package’s flat reproducer over the complete March 2026
 archives produced the same 4,125,389 keys with zero classification or
 star differences. Input, code, configuration, and output digests are in
 the [oracle
-manifest](https://github.com/sounkou-bioinfo/RClinVarbitration/blob/main/inst/audits/march-2026-flat-exact-oracle.dcf).
+manifest](https://github.com/RGenomicsETL/RClinVarbitration/blob/main/inst/audits/march-2026-flat-exact-oracle.dcf).
 
 The independently matched XML/flat audit classified every one of the 16
 shared value differences and 361 key-set differences with source-row
@@ -178,7 +178,7 @@ receipts. Most come from NCBI flat rows whose classification is `-`
 while XML carries a current classification; the remainder are one
 duplicate-SCV identity case, five source vocabulary differences, and two
 nested compound alleles. The [ERRATA
-audit](https://github.com/sounkou-bioinfo/RClinVarbitration/blob/main/docs/ERRATA.md)
+audit](https://github.com/RGenomicsETL/RClinVarbitration/blob/main/docs/ERRATA.md)
 contains the full counts and receipts. A published Zenodo release with
 16,865 reference-only keys used an unpinned source snapshot; it is not
 the exact-input conformance result.
@@ -196,9 +196,9 @@ not only to annotate known alleles. Submission descriptions, comments,
 HPO links, gene relations, and publication identifiers can support
 semantic retrieval, dynamic gene-panel proposals, and evidence review
 for VUS or novel variants. The package provides joinable views for
-[`ducksemantics`](https://github.com/sounkou-bioinfo/ducksemantics),
+[`ducksemantics`](https://github.com/RGenomicsETL/ducksemantics),
 DuckLake release history, and the source-observation model planned by
-[`VariantStory`](https://github.com/sounkou-bioinfo/VariantStory).
+[`VariantStory`](https://github.com/RGenomicsETL/VariantStory).
 
 These workflows retrieve and rank evidence; an embedding neighbor does
 not classify a variant. Provider identity, release, source rows,
@@ -214,32 +214,32 @@ provided by NCBI.
 
 ## Connection, download, and import
 
-- [`rclinvarbitration_download_clinvar()`](https://sounkou-bioinfo.github.io/RClinVarbitration/reference/rclinvarbitration_download_clinvar.md)
+- [`rclinvarbitration_download_clinvar()`](https://rgenomicsetl.github.io/RClinVarbitration/reference/rclinvarbitration_download_clinvar.md)
   : Download official ClinVar source files
-- [`rclinvarbitration_extension_path()`](https://sounkou-bioinfo.github.io/RClinVarbitration/reference/rclinvarbitration_extension_path.md)
+- [`rclinvarbitration_extension_path()`](https://rgenomicsetl.github.io/RClinVarbitration/reference/rclinvarbitration_extension_path.md)
   : Locate a version-matched RClinVarbitration DuckDB extension
-- [`rclinvarbitration_enable()`](https://sounkou-bioinfo.github.io/RClinVarbitration/reference/rclinvarbitration_enable.md)
+- [`rclinvarbitration_enable()`](https://rgenomicsetl.github.io/RClinVarbitration/reference/rclinvarbitration_enable.md)
   : Enable native ClinVar XML scanning on a DuckDB connection
-- [`rclinvarbitration_init()`](https://sounkou-bioinfo.github.io/RClinVarbitration/reference/rclinvarbitration_init.md)
+- [`rclinvarbitration_init()`](https://rgenomicsetl.github.io/RClinVarbitration/reference/rclinvarbitration_init.md)
   : Initialize the ClinVar relational schema
-- [`rclinvarbitration_import_xml()`](https://sounkou-bioinfo.github.io/RClinVarbitration/reference/rclinvarbitration_import_xml.md)
+- [`rclinvarbitration_import_xml()`](https://rgenomicsetl.github.io/RClinVarbitration/reference/rclinvarbitration_import_xml.md)
   : Stream a ClinVar VCV XML release into relational DuckDB tables
 
 ## Parquet outputs
 
-- [`rclinvarbitration_export_clinvarbitration_parquet()`](https://sounkou-bioinfo.github.io/RClinVarbitration/reference/rclinvarbitration_export_clinvarbitration_parquet.md)
+- [`rclinvarbitration_export_clinvarbitration_parquet()`](https://rgenomicsetl.github.io/RClinVarbitration/reference/rclinvarbitration_export_clinvarbitration_parquet.md)
   : Export an allele-level ClinVarbitration-compatible Parquet file
-- [`rclinvarbitration_reproduce_clinvarbitration_parquet()`](https://sounkou-bioinfo.github.io/RClinVarbitration/reference/rclinvarbitration_reproduce_clinvarbitration_parquet.md)
+- [`rclinvarbitration_reproduce_clinvarbitration_parquet()`](https://rgenomicsetl.github.io/RClinVarbitration/reference/rclinvarbitration_reproduce_clinvarbitration_parquet.md)
   : Reproduce ClinVarbitration decisions from archived ClinVar flat
   files
 
 ## Schema and policy
 
-- [`rclinvarbitration_schema_sql()`](https://sounkou-bioinfo.github.io/RClinVarbitration/reference/rclinvarbitration_schema_sql.md)
+- [`rclinvarbitration_schema_sql()`](https://rgenomicsetl.github.io/RClinVarbitration/reference/rclinvarbitration_schema_sql.md)
   : ClinVar relational schema SQL
-- [`rclinvarbitration_policy_version()`](https://sounkou-bioinfo.github.io/RClinVarbitration/reference/rclinvarbitration_policy_version.md)
+- [`rclinvarbitration_policy_version()`](https://rgenomicsetl.github.io/RClinVarbitration/reference/rclinvarbitration_policy_version.md)
   : Current ClinVarbitration policy version
-- [`rclinvarbitration_policy_sql()`](https://sounkou-bioinfo.github.io/RClinVarbitration/reference/rclinvarbitration_policy_sql.md)
+- [`rclinvarbitration_policy_sql()`](https://rgenomicsetl.github.io/RClinVarbitration/reference/rclinvarbitration_policy_sql.md)
   : ClinVarbitration policy SQL
 
 # Articles
@@ -247,8 +247,8 @@ provided by NCBI.
 ### Concepts and integrations
 
 - [ClinVarbitration arbitration
-  algorithm](https://sounkou-bioinfo.github.io/RClinVarbitration/articles/arbitration-algorithm.md):
+  algorithm](https://rgenomicsetl.github.io/RClinVarbitration/articles/arbitration-algorithm.md):
 - [Storage, caching, and full-release
-  performance](https://sounkou-bioinfo.github.io/RClinVarbitration/articles/storage-cache-and-performance.md):
+  performance](https://rgenomicsetl.github.io/RClinVarbitration/articles/storage-cache-and-performance.md):
 - [Semantic retrieval, DuckLake, and
-  VariantStory](https://sounkou-bioinfo.github.io/RClinVarbitration/articles/semantic-ducklake-variantstory.md):
+  VariantStory](https://rgenomicsetl.github.io/RClinVarbitration/articles/semantic-ducklake-variantstory.md):

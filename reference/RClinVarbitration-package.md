@@ -11,12 +11,12 @@ records.
 
 Useful links:
 
-- <https://github.com/sounkou-bioinfo/RClinVarbitration>
+- <https://github.com/RGenomicsETL/RClinVarbitration>
 
-- <https://sounkou-bioinfo.github.io/RClinVarbitration/>
+- <https://rgenomicsetl.github.io/RClinVarbitration/>
 
 - Report bugs at
-  <https://github.com/sounkou-bioinfo/RClinVarbitration/issues>
+  <https://github.com/RGenomicsETL/RClinVarbitration/issues>
 
 ## Author
 

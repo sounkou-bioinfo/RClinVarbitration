@@ -27,7 +27,7 @@ rclinvarbitration_export_clinvarbitration_parquet(
 - con:
 
   A DuckDB DBI connection initialized with
-  [`rclinvarbitration_init()`](https://sounkou-bioinfo.github.io/RClinVarbitration/reference/rclinvarbitration_init.md).
+  [`rclinvarbitration_init()`](https://rgenomicsetl.github.io/RClinVarbitration/reference/rclinvarbitration_init.md).
 
 - path:
 

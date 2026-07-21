@@ -7,7 +7,7 @@ them a “cache” hides important lifecycle differences.
 
 ### Download cache
 
-[`rclinvarbitration_download_clinvar()`](https://sounkou-bioinfo.github.io/RClinVarbitration/reference/rclinvarbitration_download_clinvar.md)
+[`rclinvarbitration_download_clinvar()`](https://rgenomicsetl.github.io/RClinVarbitration/reference/rclinvarbitration_download_clinvar.md)
 stores official NCBI files under
 `tools::R_user_dir("RClinVarbitration", "cache")` by default. It accepts
 either `release = "latest"` or a specific monthly archive such as
@@ -34,7 +34,7 @@ explicit monthly archive is preferable.
 
 At package installation, the native C source is built separately for
 every supported DuckDB version.
-[`rclinvarbitration_enable()`](https://sounkou-bioinfo.github.io/RClinVarbitration/reference/rclinvarbitration_enable.md)
+[`rclinvarbitration_enable()`](https://rgenomicsetl.github.io/RClinVarbitration/reference/rclinvarbitration_enable.md)
 selects the artifact whose embedded DuckDB version and exact
 `PRAGMA platform` value match the active connection. Windows packages
 include both `windows_amd64` and R-devel’s `windows_amd64_mingw`
@@ -170,7 +170,7 @@ process RSS limit: native parser, compression, allocator, and other
 process memory remain outside that configured buffer budget.
 
 The timed scope is
-[`rclinvarbitration_import_xml()`](https://sounkou-bioinfo.github.io/RClinVarbitration/reference/rclinvarbitration_import_xml.md)
+[`rclinvarbitration_import_xml()`](https://rgenomicsetl.github.io/RClinVarbitration/reference/rclinvarbitration_import_xml.md)
 only. Connection creation, extension loading, schema initialization,
 final `CHECKPOINT`, and process startup are excluded. The complete
 process including those operations took 21 minutes 53.3 seconds.

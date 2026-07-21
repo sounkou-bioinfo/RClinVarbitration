@@ -24,7 +24,7 @@ rclinvarbitration_policy_sql(
 - policy_version:
 
   Exact supported policy version. See
-  [`rclinvarbitration_policy_version()`](https://sounkou-bioinfo.github.io/RClinVarbitration/reference/rclinvarbitration_policy_version.md).
+  [`rclinvarbitration_policy_version()`](https://rgenomicsetl.github.io/RClinVarbitration/reference/rclinvarbitration_policy_version.md).
 
 ## Value
 

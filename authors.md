@@ -13,16 +13,16 @@
 ## Citation
 
 Source:
-[`DESCRIPTION`](https://github.com/sounkou-bioinfo/RClinVarbitration/blob/main/DESCRIPTION)
+[`DESCRIPTION`](https://github.com/RGenomicsETL/RClinVarbitration/blob/main/DESCRIPTION)
 
 Toure S (2026). *RClinVarbitration: Stream ClinVar XML into Relational
 DuckDB Tables*. R package version 0.1.1,
-<https://github.com/sounkou-bioinfo/RClinVarbitration>.
+<https://github.com/RGenomicsETL/RClinVarbitration>.
 
     @Manual{,
       title = {RClinVarbitration: Stream ClinVar XML into Relational DuckDB Tables},
       author = {Sounkou Mahamane Toure},
       year = {2026},
       note = {R package version 0.1.1},
-      url = {https://github.com/sounkou-bioinfo/RClinVarbitration},
+      url = {https://github.com/RGenomicsETL/RClinVarbitration},
     }

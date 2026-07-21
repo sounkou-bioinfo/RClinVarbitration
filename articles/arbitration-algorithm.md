@@ -23,7 +23,7 @@ There are two decision scopes:
   allele-level output.
 
 The separate
-[`rclinvarbitration_reproduce_clinvarbitration_parquet()`](https://sounkou-bioinfo.github.io/RClinVarbitration/reference/rclinvarbitration_reproduce_clinvarbitration_parquet.md)
+[`rclinvarbitration_reproduce_clinvarbitration_parquet()`](https://rgenomicsetl.github.io/RClinVarbitration/reference/rclinvarbitration_reproduce_clinvarbitration_parquet.md)
 function reads the archived NCBI flat files only for differential
 validation against an upstream artifact. It is redundant for normal
 XML-based use.
@@ -154,7 +154,7 @@ cross-references are selected in this order: MedGen, MONDO, OMIM,
 Orphanet, MeSH, UMLS, then OMIM phenotypic series. These are pragmatic
 grouping rules and are audited as deviations from NCBI’s own aggregate
 semantics in the [deviation and differential
-audit](https://github.com/sounkou-bioinfo/RClinVarbitration/blob/main/docs/ERRATA.md).
+audit](https://github.com/RGenomicsETL/RClinVarbitration/blob/main/docs/ERRATA.md).
 
 ## Output and audit columns
 

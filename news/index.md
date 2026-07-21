@@ -17,7 +17,7 @@
   `windows_amd64_mingw` identities.
 
 - Add
-  [`rclinvarbitration_download_clinvar()`](https://sounkou-bioinfo.github.io/RClinVarbitration/reference/rclinvarbitration_download_clinvar.md)
+  [`rclinvarbitration_download_clinvar()`](https://rgenomicsetl.github.io/RClinVarbitration/reference/rclinvarbitration_download_clinvar.md)
   for checksum-validated current or monthly archived VCV XML downloads
   and optional flat-file validation inputs. Download URL, digest, and
   source byte size can flow into the release catalogue.

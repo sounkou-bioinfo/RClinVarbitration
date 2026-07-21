@@ -2,9 +2,9 @@
 
 Downloads either the current ClinVar release or a named monthly archive
 from the NCBI HTTPS service. The VCV XML file is the normal input to
-[`rclinvarbitration_import_xml()`](https://sounkou-bioinfo.github.io/RClinVarbitration/reference/rclinvarbitration_import_xml.md).
+[`rclinvarbitration_import_xml()`](https://rgenomicsetl.github.io/RClinVarbitration/reference/rclinvarbitration_import_xml.md).
 The two flat files are optional, validation-only inputs to
-[`rclinvarbitration_reproduce_clinvarbitration_parquet()`](https://sounkou-bioinfo.github.io/RClinVarbitration/reference/rclinvarbitration_reproduce_clinvarbitration_parquet.md).
+[`rclinvarbitration_reproduce_clinvarbitration_parquet()`](https://rgenomicsetl.github.io/RClinVarbitration/reference/rclinvarbitration_reproduce_clinvarbitration_parquet.md).
 
 ## Usage
 

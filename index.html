@@ -42,14 +42,14 @@
   </ul>
 </li>
 <li class="nav-item"><a class="nav-link" href="reference/index.html">Reference</a></li>
-<li class="nav-item"><a class="external-link nav-link" href="https://github.com/sounkou-bioinfo/RClinVarbitration/blob/main/docs/ERRATA.md">Errata</a></li>
+<li class="nav-item"><a class="external-link nav-link" href="https://github.com/RGenomicsETL/RClinVarbitration/blob/main/docs/ERRATA.md">Errata</a></li>
 <li class="nav-item"><a class="nav-link" href="news/index.html">Changelog</a></li>
       </ul>
 <ul class="navbar-nav">
 <li class="nav-item"><form class="form-inline" role="search">
  <input class="form-control" type="search" name="search-input" id="search-input" autocomplete="off" aria-label="Search site" placeholder="Search for" data-search-index="search.json">
 </form></li>
-<li class="nav-item"><a class="external-link nav-link" href="https://github.com/sounkou-bioinfo/RClinVarbitration/" aria-label="GitHub"><span class="fa fab fa-github fa-lg"></span></a></li>
+<li class="nav-item"><a class="external-link nav-link" href="https://github.com/RGenomicsETL/RClinVarbitration/" aria-label="GitHub"><span class="fa fab fa-github fa-lg"></span></a></li>
       </ul>
 </div>
 
@@ -60,7 +60,7 @@
   <main id="main" class="col-md-9"><div class="section level1">
 <div class="page-header"><h1 id="rclinvarbitration">RClinVarbitration<a class="anchor" aria-label="anchor" href="#rclinvarbitration"></a>
 </h1></div>
-<p><a href="https://github.com/sounkou-bioinfo/RClinVarbitration/actions/workflows/R-CMD-check.yaml" class="external-link"><img src="https://github.com/sounkou-bioinfo/RClinVarbitration/actions/workflows/R-CMD-check.yaml/badge.svg" alt="R-CMD-check"></a> <a href="https://sounkou-bioinfo.github.io/RClinVarbitration/"><img src="https://github.com/sounkou-bioinfo/RClinVarbitration/actions/workflows/pkgdown.yaml/badge.svg" alt="pkgdown"></a> <a href="https://sounkou-bioinfo.r-universe.dev/" class="external-link"><img src="https://sounkou-bioinfo.r-universe.dev/badges/:name" alt="r-universe"></a></p>
+<p><a href="https://github.com/RGenomicsETL/RClinVarbitration/actions/workflows/R-CMD-check.yaml" class="external-link"><img src="https://github.com/RGenomicsETL/RClinVarbitration/actions/workflows/R-CMD-check.yaml/badge.svg" alt="R-CMD-check"></a> <a href="https://rgenomicsetl.github.io/RClinVarbitration/"><img src="https://github.com/RGenomicsETL/RClinVarbitration/actions/workflows/pkgdown.yaml/badge.svg" alt="pkgdown"></a> <a href="https://rgenomicsetl.r-universe.dev/" class="external-link"><img src="https://rgenomicsetl.r-universe.dev/badges/:name" alt="r-universe"></a></p>
 <p><code>RClinVarbitration</code> streams official ClinVar VCV XML/XML.GZ releases into relational DuckDB tables and derives ClinVarbitration-style decisions from the retained SCV submissions. The import is a single forward scan: it does not load the XML release into an R data frame or an in-memory XML tree.</p>
 <p>The package bundles exact-version DuckDB extensions for DuckDB <code>v1.5.0</code> through <code>v1.5.4</code>. Connections must allow locally built unsigned extensions.</p>
 <div class="section level2">
@@ -70,7 +70,7 @@
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/install.packages.html" class="external-link">install.packages</a></span><span class="op">(</span></span>
 <span>  <span class="st">"RClinVarbitration"</span>,</span>
 <span>  repos <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
-<span>    sounkou <span class="op">=</span> <span class="st">"https://sounkou-bioinfo.r-universe.dev"</span>,</span>
+<span>    rgenomicsetl <span class="op">=</span> <span class="st">"https://rgenomicsetl.r-universe.dev"</span>,</span>
 <span>    CRAN <span class="op">=</span> <span class="st">"https://cloud.r-project.org"</span></span>
 <span>  <span class="op">)</span></span>
 <span><span class="op">)</span></span></code></pre></div>
@@ -82,7 +82,7 @@
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://dbi.r-dbi.org" class="external-link">DBI</a></span><span class="op">)</span></span>
 <span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://r.duckdb.org/" class="external-link">duckdb</a></span><span class="op">)</span></span>
-<span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/sounkou-bioinfo/RClinVarbitration" class="external-link">RClinVarbitration</a></span><span class="op">)</span></span>
+<span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/RGenomicsETL/RClinVarbitration" class="external-link">RClinVarbitration</a></span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">con</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://dbi.r-dbi.org/reference/dbConnect.html" class="external-link">dbConnect</a></span><span class="op">(</span><span class="fu"><a href="https://r.duckdb.org/reference/duckdb.html" class="external-link">duckdb</a></span><span class="op">(</span>config <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>allow_unsigned_extensions <span class="op">=</span> <span class="st">"true"</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
 <span></span>
@@ -178,7 +178,7 @@
 </tr>
 </tbody>
 </table>
-<p>Read the <a href="https://sounkou-bioinfo.github.io/RClinVarbitration/articles/arbitration-algorithm.html">arbitration algorithm</a>, <a href="https://sounkou-bioinfo.github.io/RClinVarbitration/articles/storage-cache-and-performance.html">storage and caching guide</a>, and <a href="https://sounkou-bioinfo.github.io/RClinVarbitration/articles/semantic-ducklake-variantstory.html">semantic/DuckLake/VariantStory integration</a>. The <a href="https://github.com/sounkou-bioinfo/RClinVarbitration/blob/main/docs/ERRATA.md" class="external-link">deviation and differential audit</a> records known differences from upstream ClinVarbitration and ClinVar.</p>
+<p>Read the <a href="https://rgenomicsetl.github.io/RClinVarbitration/articles/arbitration-algorithm.html">arbitration algorithm</a>, <a href="https://rgenomicsetl.github.io/RClinVarbitration/articles/storage-cache-and-performance.html">storage and caching guide</a>, and <a href="https://rgenomicsetl.github.io/RClinVarbitration/articles/semantic-ducklake-variantstory.html">semantic/DuckLake/VariantStory integration</a>. The <a href="https://github.com/RGenomicsETL/RClinVarbitration/blob/main/docs/ERRATA.md" class="external-link">deviation and differential audit</a> records known differences from upstream ClinVarbitration and ClinVar.</p>
 <p>A measured complete 2026-07-02 release (5.42 GiB compressed XML) imported in 21 minutes 52.5 seconds and produced a 22.33-GiB physical DuckDB file. The storage guide reports hardware, row counts, peak memory, and the used/free block split behind that physical high-water size.</p>
 </div>
 <div class="section level2">
@@ -248,14 +248,14 @@
 </tbody>
 </table>
 <p>The shared decision rules include the 2016 ACMG date filter, classification bins, 60/20 majority rule, strong-review precedence, and star calculation. The XML-derived Parquet export has the upstream seven-column decision schema, but is not expected to be byte-identical because its source and grouping differ.</p>
-<p>The archived-flat-file reproducer is retained only as a differential-validation utility; it is redundant for ordinary XML imports. An exact-input execution of the pinned upstream Python TSV stage and this package’s flat reproducer over the complete March 2026 archives produced the same 4,125,389 keys with zero classification or star differences. Input, code, configuration, and output digests are in the <a href="https://github.com/sounkou-bioinfo/RClinVarbitration/blob/main/inst/audits/march-2026-flat-exact-oracle.dcf" class="external-link">oracle manifest</a>.</p>
-<p>The independently matched XML/flat audit classified every one of the 16 shared value differences and 361 key-set differences with source-row receipts. Most come from NCBI flat rows whose classification is <code>-</code> while XML carries a current classification; the remainder are one duplicate-SCV identity case, five source vocabulary differences, and two nested compound alleles. The <a href="https://github.com/sounkou-bioinfo/RClinVarbitration/blob/main/docs/ERRATA.md" class="external-link">ERRATA audit</a> contains the full counts and receipts. A published Zenodo release with 16,865 reference-only keys used an unpinned source snapshot; it is not the exact-input conformance result.</p>
+<p>The archived-flat-file reproducer is retained only as a differential-validation utility; it is redundant for ordinary XML imports. An exact-input execution of the pinned upstream Python TSV stage and this package’s flat reproducer over the complete March 2026 archives produced the same 4,125,389 keys with zero classification or star differences. Input, code, configuration, and output digests are in the <a href="https://github.com/RGenomicsETL/RClinVarbitration/blob/main/inst/audits/march-2026-flat-exact-oracle.dcf" class="external-link">oracle manifest</a>.</p>
+<p>The independently matched XML/flat audit classified every one of the 16 shared value differences and 361 key-set differences with source-row receipts. Most come from NCBI flat rows whose classification is <code>-</code> while XML carries a current classification; the remainder are one duplicate-SCV identity case, five source vocabulary differences, and two nested compound alleles. The <a href="https://github.com/RGenomicsETL/RClinVarbitration/blob/main/docs/ERRATA.md" class="external-link">ERRATA audit</a> contains the full counts and receipts. A published Zenodo release with 16,865 reference-only keys used an unpinned source snapshot; it is not the exact-input conformance result.</p>
 <p>One deliberate edge-case difference is that RClinVarbitration applies the qualified Illumina benign exclusion declared by upstream. At the pinned commit, the Python implementation’s inner-loop <code>continue</code> does not actually remove that submission, so compatibility here follows the documented policy rather than that implementation accident.</p>
 </div>
 <div class="section level2">
 <h2 id="evidence-retrieval-and-reanalysis">Evidence retrieval and reanalysis<a class="anchor" aria-label="anchor" href="#evidence-retrieval-and-reanalysis"></a>
 </h2>
-<p>A second motivation is to make ClinVar’s attributable evidence reusable, not only to annotate known alleles. Submission descriptions, comments, HPO links, gene relations, and publication identifiers can support semantic retrieval, dynamic gene-panel proposals, and evidence review for VUS or novel variants. The package provides joinable views for <a href="https://github.com/sounkou-bioinfo/ducksemantics" class="external-link"><code>ducksemantics</code></a>, DuckLake release history, and the source-observation model planned by <a href="https://github.com/sounkou-bioinfo/VariantStory" class="external-link"><code>VariantStory</code></a>.</p>
+<p>A second motivation is to make ClinVar’s attributable evidence reusable, not only to annotate known alleles. Submission descriptions, comments, HPO links, gene relations, and publication identifiers can support semantic retrieval, dynamic gene-panel proposals, and evidence review for VUS or novel variants. The package provides joinable views for <a href="https://github.com/RGenomicsETL/ducksemantics" class="external-link"><code>ducksemantics</code></a>, DuckLake release history, and the source-observation model planned by <a href="https://github.com/RGenomicsETL/VariantStory" class="external-link"><code>VariantStory</code></a>.</p>
 <p>These workflows retrieve and rank evidence; an embedding neighbor does not classify a variant. Provider identity, release, source rows, deterministic evidence admission, and human review must remain explicit.</p>
 </div>
 <div class="section level2">
@@ -267,8 +267,8 @@
   </main><aside class="col-md-3"><div class="links">
 <h2 data-toc-skip>Links</h2>
 <ul class="list-unstyled">
-<li><a href="https://github.com/sounkou-bioinfo/RClinVarbitration/" class="external-link">Browse source code</a></li>
-<li><a href="https://github.com/sounkou-bioinfo/RClinVarbitration/issues" class="external-link">Report a bug</a></li>
+<li><a href="https://github.com/RGenomicsETL/RClinVarbitration/" class="external-link">Browse source code</a></li>
+<li><a href="https://github.com/RGenomicsETL/RClinVarbitration/issues" class="external-link">Report a bug</a></li>
 </ul>
 </div>
 

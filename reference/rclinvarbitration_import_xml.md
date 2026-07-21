@@ -44,7 +44,7 @@ rclinvarbitration_import_xml(
 
   Optional source URL for the release catalogue. When `path` is returned
   directly by
-  [`rclinvarbitration_download_clinvar()`](https://sounkou-bioinfo.github.io/RClinVarbitration/reference/rclinvarbitration_download_clinvar.md),
+  [`rclinvarbitration_download_clinvar()`](https://rgenomicsetl.github.io/RClinVarbitration/reference/rclinvarbitration_download_clinvar.md),
   its download metadata supplies this value automatically.
 
 - source_md5:

@@ -53,7 +53,7 @@ A named list describing the written Parquet file, invisibly.
 ## Details
 
 This is separate from
-[`rclinvarbitration_import_xml()`](https://sounkou-bioinfo.github.io/RClinVarbitration/reference/rclinvarbitration_import_xml.md)
+[`rclinvarbitration_import_xml()`](https://rgenomicsetl.github.io/RClinVarbitration/reference/rclinvarbitration_import_xml.md)
 and the disease-aware policy views. It exists to reproduce and
 differentially validate the upstream allele-level artifact on matching
 archived flat-file releases. It uses DuckDB's streaming CSV reader and
