@@ -6,13 +6,15 @@ output: github_document
 
 # RClinVarbitration
 
-`RClinVarbitration` streams official ClinVar VCV XML/XML.GZ into focused
-relational DuckDB tables. It retains public VCV, RCV, SCV, AlleleID, and
-VariationID identifiers instead of exposing XML parser coordinates.
+`RClinVarbitration` streams the complete official ClinVar VCV XML/XML.GZ
+release into focused relational DuckDB tables. It retains public VCV, RCV, SCV,
+AlleleID, VariationID, and disease identifiers instead of exposing XML parser
+coordinates.
 
 The package-owned native extension uses a libxml2 forward reader. An import
-reads the XML exactly once into a compact temporary semantic-fact table,
-projects ordinary ClinVar relations, and drops the temporary table. It does not
+reads the gzip XML exactly once and writes one compact JSON-backed row per
+selected ClinVar entity to a disk-backed staging table. It then projects
+ordinary ClinVar relations without an EAV pivot and drops staging. It does not
 build an XML DOM or R data frame and does not persist generic XML nodes, edges,
 or element statements.
 
@@ -28,79 +30,175 @@ bundles and selects exact-version artifacts for DuckDB `v1.5.0` through
 | `clinvar_alleles` | allele or variation component |
 | `clinvar_locations` | assembly-specific allele location |
 | `clinvar_genes` | allele–gene relation |
-| `clinvar_rcv_assertions` | RCV aggregate assertion |
+| `clinvar_rcv_assertions` | disease-specific RCV aggregate assertion |
 | `clinvar_scv_assertions` | submitted SCV assertion |
-| `clinvar_conditions` | condition attached to a VCV, RCV, or SCV |
+| `clinvar_conditions` | condition attached to an RCV or SCV |
 | `clinvar_condition_names` | preferred or alternate condition name |
 | `clinvar_observations` | SCV observation |
-| `clinvar_citations` | attributable citation |
+| `clinvar_citations` | SCV-attributable citation |
 | `clinvar_citation_identifiers` | PMID, DOI, or other citation identifier |
-| `clinvar_attributes` | typed source attribute retained with its context |
-| `clinvar_text` | attributable comment, definition, condition name, or other discovery text |
+| `clinvar_attributes` | typed SCV source attribute retained with its context |
+| `clinvar_text` | attributable assertion comment, condition name, or evidence text |
 | `clinvar_normalized_alleles` | assembly/locus/ref/alt join view |
+| `clinvar_disease_aggregates` | VCV/allele × RCV × disease aggregate |
+| `clinvar_disease_submissions` | VCV/allele × SCV × disease submission |
 
-The source package includes one **unaltered official NCBI VCV XML.GZ record**
-for a fast executable smoke test. It is not synthetic data and is not presented
-as a full-release benchmark. Full releases use the same import call against
-`ClinVarVCVRelease_00-latest.xml.gz`; they belong in a file-backed DuckDB and
-are intentionally not reparsed whenever this README is rendered.
+The release-scale tables retain explicit logical key columns but do not create
+DuckDB ART indexes: those indexes must remain memory-resident and are a poor fit
+for a complete analytical release. The small `clinvar_releases` completion
+catalogue retains its primary key.
 
-```{r example}
+The executable README requires the complete local
+`ClinVarVCVRelease_00-latest.xml.gz`, selected with
+`CLINVAR_VCV_XML_FILE`, and an explicit immutable release label in
+`CLINVAR_RELEASE_ID`. It does not substitute the bundled one-record regression
+fixture. A **file-backed** DuckDB holds the complete import so every following
+query reuses the same data rather than rescanning XML. Set
+`CLINVAR_DUCKDB_FILE` to retain and reuse a completed import across renders;
+otherwise the executable document uses a temporary database.
+
+```{r import-full-release}
 library(DBI)
 library(duckdb)
 library(RClinVarbitration)
 
-con <- dbConnect(duckdb(config = list(allow_unsigned_extensions = "true")))
+clinvar_xml <- Sys.getenv("CLINVAR_VCV_XML_FILE")
+release_id <- Sys.getenv("CLINVAR_RELEASE_ID")
+stopifnot(
+  nzchar(release_id),
+  file.exists(clinvar_xml),
+  identical(basename(clinvar_xml), "ClinVarVCVRelease_00-latest.xml.gz")
+)
+
+clinvar_db <- Sys.getenv("CLINVAR_DUCKDB_FILE")
+persistent_db <- nzchar(clinvar_db)
+if (persistent_db) {
+  dir.create(dirname(clinvar_db), recursive = TRUE, showWarnings = FALSE)
+  clinvar_db <- normalizePath(clinvar_db, mustWork = FALSE)
+} else {
+  clinvar_db <- tempfile("rclinvarbitration-readme-", fileext = ".duckdb")
+}
+clinvar_tmp <- paste0(clinvar_db, ".tmp")
+con <- dbConnect(duckdb(
+  dbdir = clinvar_db,
+  config = list(
+    allow_unsigned_extensions = "true",
+    memory_limit = Sys.getenv("CLINVAR_DUCKDB_MEMORY_LIMIT", "2GB"),
+    preserve_insertion_order = "false",
+    temp_directory = clinvar_tmp,
+    threads = "2"
+  )
+))
 rclinvarbitration_enable(con)
-clinvar_xml <- system.file(
-  "extdata", "VCV_XML_VCV000091629.xml.gz",
-  package = "RClinVarbitration", mustWork = TRUE
+rclinvarbitration_init(con)
+release_sql <- as.character(dbQuoteString(con, release_id))
+stored_release <- dbGetQuery(con, paste0(
+  "SELECT source_path FROM clinvar_releases WHERE release_id = ", release_sql
+))
+count_relations <- c(
+  variants = "clinvar_variants",
+  alleles = "clinvar_alleles",
+  rcv_assertions = "clinvar_rcv_assertions",
+  scv_assertions = "clinvar_scv_assertions",
+  conditions = "clinvar_conditions",
+  observations = "clinvar_observations",
+  citations = "clinvar_citations",
+  text = "clinvar_text"
 )
-counts <- rclinvarbitration_import_xml(
-  con,
-  clinvar_xml,
-  release_id = "ncbi-vcv-91629"
-)
+if (nrow(stored_release)) {
+  stopifnot(identical(stored_release$source_path, normalizePath(clinvar_xml)))
+  counts <- vapply(count_relations, function(table) {
+    dbGetQuery(con, paste0(
+      "SELECT count(*) AS n FROM ", table, " WHERE release_id = ", release_sql
+    ))$n[[1L]]
+  }, numeric(1))
+} else {
+  counts <- rclinvarbitration_import_xml(
+    con,
+    clinvar_xml,
+    release_id = release_id
+  )
+}
 knitr::kable(
   data.frame(relation = names(counts), rows = unname(counts)),
   row.names = FALSE
 )
 ```
 
+## Disease-specific aggregates
+
+RCVs are the disease-specific ClinVar aggregates. They remain distinct from the
+VCV-level aggregate and are joined directly to their classified condition. This
+is the primary substrate for reproducing ClinVarbitration and for deriving
+alternative disease-aware policies.
+
+```{r disease-aggregate-summary}
+disease_summary <- dbGetQuery(con, "
+  SELECT aggregate_classification, aggregate_review_status,
+         count(*) AS disease_aggregates,
+         count(DISTINCT disease_identifier) AS identified_diseases
+  FROM clinvar_disease_aggregates
+  GROUP BY aggregate_classification, aggregate_review_status
+  ORDER BY disease_aggregates DESC
+  LIMIT 20
+")
+knitr::kable(disease_summary, row.names = FALSE)
+```
+
+```{r disease-aggregate-examples}
+disease_aggregates <- dbGetQuery(con, "
+  SELECT vcv_accession, rcv_accession,
+         disease_database, disease_identifier, disease_name,
+         aggregate_classification, aggregate_review_status
+  FROM clinvar_disease_aggregates
+  WHERE disease_identifier IS NOT NULL
+  ORDER BY vcv_accession, rcv_accession
+  LIMIT 12
+")
+knitr::kable(disease_aggregates, row.names = FALSE)
+```
+
+Individual SCVs retain their disease mappings, submitters, dates, review status,
+and contribution flags. Policy SQL can therefore recompute an aggregate per
+allele and disease instead of accepting only ClinVar's top-line VCV label.
+
+```{r disease-submission-summary}
+submission_summary <- dbGetQuery(con, "
+  SELECT classification, review_status,
+         count(*) AS disease_submissions,
+         count(DISTINCT submitter_id) AS submitters
+  FROM clinvar_disease_submissions
+  GROUP BY classification, review_status
+  ORDER BY disease_submissions DESC
+  LIMIT 20
+")
+knitr::kable(submission_summary, row.names = FALSE)
+```
+
+## Normalized allele join surface
+
 The normalized allele view is the join surface for downstream
 Rduckhts/DuckHTS work. RClinVarbitration does not duplicate VEP or PM5.
 
-```{r alleles}
+```{r allele-summary}
 alleles <- dbGetQuery(con, "
-  SELECT vcv_accession, allele_id, variation_id, assembly,
-         chromosome, position_vcf, reference, alternate, canonical_spdi
+  SELECT assembly,
+         count(*) AS normalized_alleles,
+         count(DISTINCT allele_id) AS allele_ids
   FROM clinvar_normalized_alleles
+  GROUP BY assembly
   ORDER BY assembly
 ")
 knitr::kable(alleles, row.names = FALSE)
 ```
 
-SCV classifications remain separate from ClinVar's VCV and RCV aggregates, so
-later policy SQL can filter submitters and dates without reconstructing
-assertions from XML paths.
-
-```{r assertions}
-assertions <- dbGetQuery(con, "
-  SELECT scv_accession, submitter_name, classification,
-         review_status, date_last_evaluated
-  FROM clinvar_scv_assertions
-  ORDER BY scv_accession
-")
-knitr::kable(assertions, row.names = FALSE)
-```
-
-Long assertion explanations are queried as attributable text. The README
-selects and truncates them in SQL so knitr never prints a data frame padded to
-the width of the longest ClinVar comment.
+Long assertion explanations remain attributable to the source SCV. The README
+truncates selected text in SQL so knitr does not pad console output to the width
+of the longest ClinVar comment.
 
 ```{r evidence}
 evidence <- dbGetQuery(con, "
-  SELECT s.scv_accession,
+  SELECT s.scv_accession, s.submitter_name,
          left(t.text, 180) || CASE WHEN length(t.text) > 180 THEN '…' ELSE '' END AS excerpt
   FROM clinvar_text t
   JOIN clinvar_scv_assertions s
@@ -108,21 +206,25 @@ evidence <- dbGetQuery(con, "
    AND s.assertion_entity_id = t.scv_entity_id
   WHERE t.section = 'comment'
   ORDER BY s.scv_accession
+  LIMIT 8
 ")
 knitr::kable(evidence, row.names = FALSE)
 
 DBI::dbDisconnect(con, shutdown = TRUE)
+if (!persistent_db) {
+  unlink(
+    c(clinvar_db, paste0(clinvar_db, ".wal"), clinvar_tmp),
+    recursive = TRUE,
+    force = TRUE
+  )
+}
 ```
 
-For a full release, open a file-backed connection and pass the local official
-XML.GZ path to `rclinvarbitration_import_xml()`. The import is one forward XML
-pass; the resulting DuckDB relations are queried repeatedly without reparsing
-the gzip file.
-
-ClinVarbitration decision rules are intentionally a later versioned SQL layer
-over `clinvar_scv_assertions`. P/LP policy outputs will join
+ClinVarbitration decision rules are a versioned SQL layer over
+`clinvar_disease_submissions`. P/LP outputs join
 `clinvar_normalized_alleles` by assembly, chromosome, position, reference, and
-alternate allele.
+alternate allele. DuckLake can later retain each merged release as a snapshot,
+but XML ingestion and policy semantics remain explicit here.
 
 ## Acknowledgement
 

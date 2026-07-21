@@ -16,7 +16,7 @@ rclinvarbitration_enable(con, extension_path = NULL)
 }
 \description{
 Loads the package-owned \code{rclinvarbitration} extension. Its native
-\code{clinvar_xml_facts(path)} table function is the compact one-pass staging
-surface used by \code{\link[=rclinvarbitration_import_xml]{rclinvarbitration_import_xml()}}. The connection must have been
+\code{clinvar_xml_entities(path)} table function is the compact, ClinVar-specific
+one-pass staging surface used by \code{\link[=rclinvarbitration_import_xml]{rclinvarbitration_import_xml()}}. The connection must have been
 created with \code{duckdb::duckdb(config = list(allow_unsigned_extensions = "true"))}, as for any locally built DuckDB extension.
 }

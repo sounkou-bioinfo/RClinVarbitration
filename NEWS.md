@@ -4,12 +4,18 @@
 
 - Bundle exact `C_STRUCT_UNSTABLE` extension artifacts for DuckDB `v1.5.0`
   through `v1.5.4`, selected from the enabled connection's engine version.
-- Replace generic XML node/edge/statement persistence with a one-pass compact
-  semantic staging scan and focused VCV, allele, location, gene, RCV, SCV,
-  condition, observation, citation, attribute, and evidence-text relations.
-- Keep README execution fast and deterministic with the bundled unaltered NCBI
-  VCV record; full multi-gigabyte releases are imported once into file-backed
-  DuckDB databases rather than reparsed while rendering documentation.
+- Replace generic XML node/edge/statement persistence with a one-pass,
+  ClinVar-specific entity scan and focused VCV, allele, location, gene, RCV,
+  SCV, condition, observation, citation, attribute, and evidence-text
+  relations. Staging now stores one JSON-backed row per selected entity and
+  requires no release-wide EAV grouping. Release-scale tables use logical keys
+  without memory-resident ART indexes, and each projection commits separately;
+  the release catalogue marks completion and failed imports clean partial rows.
+- Add `clinvar_disease_aggregates` and `clinvar_disease_submissions` as direct
+  RCV- and SCV-level disease-policy inputs.
+- Require README execution against the complete official VCV XML.GZ in one
+  file-backed import; all displayed summaries query that persisted import and
+  never rescan XML.
 
 ## 0.1.0
 

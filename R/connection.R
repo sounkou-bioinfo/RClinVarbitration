@@ -64,8 +64,8 @@ rclinvarbitration_extension_path <- function(duckdb_version = NULL) {
 #' Enable native ClinVar XML scanning on a DuckDB connection
 #'
 #' Loads the package-owned `rclinvarbitration` extension. Its native
-#' `clinvar_xml_facts(path)` table function is the compact one-pass staging
-#' surface used by [rclinvarbitration_import_xml()]. The connection must have been
+#' `clinvar_xml_entities(path)` table function is the compact, ClinVar-specific
+#' one-pass staging surface used by [rclinvarbitration_import_xml()]. The connection must have been
 #' created with `duckdb::duckdb(config = list(allow_unsigned_extensions =
 #' "true"))`, as for any locally built DuckDB extension.
 #'

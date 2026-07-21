@@ -20,7 +20,10 @@ A named numeric vector with imported entity counts.
 }
 \description{
 The native extension reads \code{.xml} and \code{.xml.gz} with a libxml2 forward
-reader. A compact semantic-fact staging table is produced in one XML pass,
-projected into the public ClinVar relations, and dropped. No XML DOM, XML
-blob, generic parser-node graph, or R data-frame materialization is used.
+reader. One compact JSON-backed row per selected ClinVar entity is written to
+a disk-backed staging table in one XML pass, projected into the public
+ClinVar relations without an EAV pivot, and dropped. No XML DOM, XML blob,
+generic parser-node graph, or R data-frame materialization is used. Each
+public relation is committed independently, the release catalogue row marks
+completion, and failed imports remove partial rows for \code{release_id}.
 }

@@ -14,9 +14,10 @@ build: rd
 install: build
 	R CMD INSTALL --preclean $(TAR)
 
-# Render against the bundled unaltered NCBI record. A full multi-gigabyte VCV
-# release is an import/integration input, not a README build dependency.
+# The README is a full-release integration run, not a fixture smoke test.
 rdm: install
+	@test -n "$$CLINVAR_VCV_XML_FILE" && test -f "$$CLINVAR_VCV_XML_FILE" || (echo "ERROR: set CLINVAR_VCV_XML_FILE to ClinVarVCVRelease_00-latest.xml.gz" >&2; exit 1)
+	@test -n "$$CLINVAR_RELEASE_ID" || (echo "ERROR: set CLINVAR_RELEASE_ID to an immutable ClinVar release label" >&2; exit 1)
 	Rscript -e 'rmarkdown::render("README.Rmd", output_file = "README.md", quiet = TRUE)'
 	rm -f README.html
 

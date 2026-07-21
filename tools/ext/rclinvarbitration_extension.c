@@ -2,9 +2,8 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  *
  * libxml2 performs one forward scan of a ClinVar VCV XML/XML.GZ release.
- * The table function emits only ClinVar-domain facts attached to stable public
- * accessions or domain-scoped child identities. XML parser coordinates and
- * generic element/attribute statements are deliberately not exposed.
+ * The table function emits one compact row per selected ClinVar entity. XML
+ * parser coordinates and per-field EAV rows are deliberately not exposed.
  */
 #include "duckdb_extension.h"
 
@@ -22,9 +21,14 @@ DUCKDB_EXTENSION_EXTERN
 #define RCLINVAR_CHUNK_SIZE 1024U
 #define RCLINVAR_ERROR_SIZE 512U
 
-typedef struct rclinvar_fact {
+typedef struct rclinvar_field {
+    char *name;
+    char *value;
+} rclinvar_field_t;
+
+typedef struct rclinvar_entity {
     uint64_t record_ordinal;
-    uint64_t fact_ordinal;
+    uint64_t entity_ordinal;
     char *vcv_accession;
     char *rcv_entity_id;
     char *scv_entity_id;
@@ -32,9 +36,8 @@ typedef struct rclinvar_fact {
     char *entity_id;
     char *parent_type;
     char *parent_id;
-    char *field;
-    char *value;
-} rclinvar_fact_t;
+    char *fields_json;
+} rclinvar_entity_t;
 
 typedef struct rclinvar_stack_entry {
     char *name;
@@ -48,6 +51,9 @@ typedef struct rclinvar_stack_entry {
     char *text;
     size_t text_length;
     size_t text_capacity;
+    rclinvar_field_t *fields;
+    size_t field_count;
+    size_t field_capacity;
 } rclinvar_stack_entry_t;
 
 typedef struct rclinvar_bind_state {
@@ -56,15 +62,16 @@ typedef struct rclinvar_bind_state {
 
 typedef struct rclinvar_scan_state {
     xmlTextReaderPtr reader;
-    rclinvar_fact_t *facts;
-    size_t fact_count;
-    size_t fact_capacity;
-    size_t fact_pos;
+    rclinvar_entity_t *entities;
+    size_t entity_count;
+    size_t entity_capacity;
+    size_t entity_pos;
     rclinvar_stack_entry_t *stack;
     size_t stack_count;
     size_t stack_capacity;
     uint64_t record_ordinal;
-    uint64_t fact_ordinal;
+    uint64_t entity_ordinal;
+    uint64_t assertion_ordinal;
     uint64_t allele_ordinal;
     uint64_t gene_ordinal;
     uint64_t location_ordinal;
@@ -159,89 +166,229 @@ static int rclinvar_is_whitespace(const char *text) {
     return 1;
 }
 
-static void rclinvar_fact_clear(rclinvar_fact_t *fact) {
-    if (!fact) return;
-    free(fact->vcv_accession);
-    free(fact->rcv_entity_id);
-    free(fact->scv_entity_id);
-    free(fact->entity_type);
-    free(fact->entity_id);
-    free(fact->parent_type);
-    free(fact->parent_id);
-    free(fact->field);
-    free(fact->value);
-    memset(fact, 0, sizeof(*fact));
+static void rclinvar_field_clear(rclinvar_field_t *field) {
+    if (!field) return;
+    free(field->name);
+    free(field->value);
+    memset(field, 0, sizeof(*field));
 }
 
-static void rclinvar_facts_reset(rclinvar_scan_state_t *state) {
+static int rclinvar_entry_set_field(rclinvar_scan_state_t *state, rclinvar_stack_entry_t *entry,
+                                    const char *name, const char *value) {
+    size_t i;
+    size_t capacity;
+    rclinvar_field_t *fields;
+    if (!entry || !name || !value) return 0;
+    for (i = 0; i < entry->field_count; i++) {
+        if (strcmp(entry->fields[i].name, name) == 0) return 1;
+    }
+    if (entry->field_count == entry->field_capacity) {
+        capacity = entry->field_capacity ? entry->field_capacity * 2U : 8U;
+        fields = (rclinvar_field_t *)realloc(entry->fields, capacity * sizeof(*fields));
+        if (!fields) {
+            rclinvar_set_error(state, "out of memory allocating ClinVar entity fields");
+            return 0;
+        }
+        memset(fields + entry->field_capacity, 0,
+               (capacity - entry->field_capacity) * sizeof(*fields));
+        entry->fields = fields;
+        entry->field_capacity = capacity;
+    }
+    entry->fields[entry->field_count].name = rclinvar_strdup(name);
+    entry->fields[entry->field_count].value = rclinvar_strdup(value);
+    if (!entry->fields[entry->field_count].name || !entry->fields[entry->field_count].value) {
+        rclinvar_field_clear(&entry->fields[entry->field_count]);
+        rclinvar_set_error(state, "out of memory copying ClinVar entity field");
+        return 0;
+    }
+    entry->field_count++;
+    return 1;
+}
+
+static size_t rclinvar_json_escaped_size(const char *text) {
+    const unsigned char *p = (const unsigned char *)text;
+    size_t n = 0;
+    while (*p) {
+        if (*p == '"' || *p == '\\' || *p == '\b' || *p == '\f' || *p == '\n' || *p == '\r' || *p == '\t') n += 2U;
+        else if (*p < 0x20U) n += 6U;
+        else n++;
+        p++;
+    }
+    return n;
+}
+
+static char *rclinvar_json_escape_into(char *out, const char *text) {
+    const unsigned char *p = (const unsigned char *)text;
+    static const char hex[] = "0123456789abcdef";
+    while (*p) {
+        switch (*p) {
+        case '"': *out++ = '\\'; *out++ = '"'; break;
+        case '\\': *out++ = '\\'; *out++ = '\\'; break;
+        case '\b': *out++ = '\\'; *out++ = 'b'; break;
+        case '\f': *out++ = '\\'; *out++ = 'f'; break;
+        case '\n': *out++ = '\\'; *out++ = 'n'; break;
+        case '\r': *out++ = '\\'; *out++ = 'r'; break;
+        case '\t': *out++ = '\\'; *out++ = 't'; break;
+        default:
+            if (*p < 0x20U) {
+                *out++ = '\\'; *out++ = 'u'; *out++ = '0'; *out++ = '0';
+                *out++ = hex[*p >> 4U]; *out++ = hex[*p & 0x0fU];
+            } else {
+                *out++ = (char)*p;
+            }
+        }
+        p++;
+    }
+    return out;
+}
+
+static char *rclinvar_fields_json(const rclinvar_stack_entry_t *entry) {
+    size_t i;
+    size_t size = 3U;
+    char *json;
+    char *out;
+    for (i = 0; i < entry->field_count; i++) {
+        size += rclinvar_json_escaped_size(entry->fields[i].name);
+        size += rclinvar_json_escaped_size(entry->fields[i].value);
+        size += 6U;
+    }
+    json = (char *)malloc(size);
+    if (!json) return NULL;
+    out = json;
+    *out++ = '{';
+    for (i = 0; i < entry->field_count; i++) {
+        if (i) *out++ = ',';
+        *out++ = '"';
+        out = rclinvar_json_escape_into(out, entry->fields[i].name);
+        *out++ = '"'; *out++ = ':'; *out++ = '"';
+        out = rclinvar_json_escape_into(out, entry->fields[i].value);
+        *out++ = '"';
+    }
+    *out++ = '}';
+    *out = '\0';
+    return json;
+}
+
+static void rclinvar_entity_clear(rclinvar_entity_t *entity) {
+    if (!entity) return;
+    free(entity->vcv_accession);
+    free(entity->rcv_entity_id);
+    free(entity->scv_entity_id);
+    free(entity->entity_type);
+    free(entity->entity_id);
+    free(entity->parent_type);
+    free(entity->parent_id);
+    free(entity->fields_json);
+    memset(entity, 0, sizeof(*entity));
+}
+
+static void rclinvar_entities_reset(rclinvar_scan_state_t *state) {
     size_t i;
     if (!state) return;
-    for (i = state->fact_pos; i < state->fact_count; i++) rclinvar_fact_clear(&state->facts[i]);
-    state->fact_count = 0;
-    state->fact_pos = 0;
+    for (i = state->entity_pos; i < state->entity_count; i++) rclinvar_entity_clear(&state->entities[i]);
+    state->entity_count = 0;
+    state->entity_pos = 0;
 }
 
-static int rclinvar_facts_reserve(rclinvar_scan_state_t *state, size_t required) {
+static int rclinvar_entities_reserve(rclinvar_scan_state_t *state, size_t required) {
     size_t capacity;
-    rclinvar_fact_t *facts;
-    if (required <= state->fact_capacity) return 1;
-    capacity = state->fact_capacity ? state->fact_capacity : 32U;
+    rclinvar_entity_t *entities;
+    if (required <= state->entity_capacity) return 1;
+    capacity = state->entity_capacity ? state->entity_capacity : 16U;
     while (capacity < required) {
         if (capacity > SIZE_MAX / 2U) {
-            rclinvar_set_error(state, "ClinVar semantic fact queue is too large");
+            rclinvar_set_error(state, "ClinVar entity queue is too large");
             return 0;
         }
         capacity *= 2U;
     }
-    facts = (rclinvar_fact_t *)realloc(state->facts, capacity * sizeof(*facts));
-    if (!facts) {
-        rclinvar_set_error(state, "out of memory allocating ClinVar semantic facts");
+    entities = (rclinvar_entity_t *)realloc(state->entities, capacity * sizeof(*entities));
+    if (!entities) {
+        rclinvar_set_error(state, "out of memory allocating ClinVar entity queue");
         return 0;
     }
-    memset(facts + state->fact_capacity, 0, (capacity - state->fact_capacity) * sizeof(*facts));
-    state->facts = facts;
-    state->fact_capacity = capacity;
+    memset(entities + state->entity_capacity, 0,
+           (capacity - state->entity_capacity) * sizeof(*entities));
+    state->entities = entities;
+    state->entity_capacity = capacity;
     return 1;
 }
 
-static rclinvar_stack_entry_t *rclinvar_nearest_type(rclinvar_scan_state_t *state,
-                                                       const char *semantic_type);
-
-static int rclinvar_emit(rclinvar_scan_state_t *state, const char *entity_type, const char *entity_id,
-                         const char *parent_type, const char *parent_id, const char *field,
-                         const char *value) {
-    rclinvar_fact_t *fact;
-    if (!state || !entity_type || !entity_id || !field || !value) return 0;
-    if (!rclinvar_facts_reserve(state, state->fact_count + 1U)) return 0;
-    fact = &state->facts[state->fact_count];
-    fact->record_ordinal = state->record_ordinal;
-    fact->fact_ordinal = ++state->fact_ordinal;
-    {
-        rclinvar_stack_entry_t *rcv = rclinvar_nearest_type(state, "rcv_assertion");
-        rclinvar_stack_entry_t *scv = rclinvar_nearest_type(state, "scv_assertion");
-        fact->vcv_accession = rclinvar_strdup(state->vcv_accession ? state->vcv_accession : "");
-        fact->rcv_entity_id = strcmp(entity_type, "rcv_assertion") == 0 ? rclinvar_strdup(entity_id) :
-                              (rcv ? rclinvar_strdup(rcv->semantic_id) : NULL);
-        fact->scv_entity_id = strcmp(entity_type, "scv_assertion") == 0 ? rclinvar_strdup(entity_id) :
-                              (scv ? rclinvar_strdup(scv->semantic_id) : NULL);
+static rclinvar_stack_entry_t *rclinvar_nearest_semantic(rclinvar_scan_state_t *state) {
+    size_t i = state ? state->stack_count : 0;
+    while (i) {
+        rclinvar_stack_entry_t *entry = &state->stack[--i];
+        if (entry->semantic_type && entry->semantic_id) return entry;
     }
-    fact->entity_type = rclinvar_strdup(entity_type);
-    fact->entity_id = rclinvar_strdup(entity_id);
-    fact->parent_type = parent_type ? rclinvar_strdup(parent_type) : NULL;
-    fact->parent_id = parent_id ? rclinvar_strdup(parent_id) : NULL;
-    fact->field = rclinvar_strdup(field);
-    fact->value = rclinvar_strdup(value);
-    if (!fact->vcv_accession || !fact->entity_type || !fact->entity_id || !fact->field || !fact->value ||
-        (parent_type && !fact->parent_type) || (parent_id && !fact->parent_id)) {
-        rclinvar_fact_clear(fact);
-        rclinvar_set_error(state, "out of memory copying ClinVar semantic fact");
+    return NULL;
+}
+
+static rclinvar_stack_entry_t *rclinvar_nearest_type(rclinvar_scan_state_t *state,
+                                                      const char *semantic_type) {
+    size_t i = state ? state->stack_count : 0;
+    while (i) {
+        rclinvar_stack_entry_t *entry = &state->stack[--i];
+        if (entry->semantic_type && strcmp(entry->semantic_type, semantic_type) == 0) return entry;
+    }
+    return NULL;
+}
+
+static rclinvar_stack_entry_t *rclinvar_nearest_named(rclinvar_scan_state_t *state, const char *name) {
+    size_t i = state ? state->stack_count : 0;
+    while (i) {
+        rclinvar_stack_entry_t *entry = &state->stack[--i];
+        if (entry->name && strcmp(entry->name, name) == 0) return entry;
+    }
+    return NULL;
+}
+
+static int rclinvar_stack_contains(rclinvar_scan_state_t *state, const char *name) {
+    return rclinvar_nearest_named(state, name) != NULL;
+}
+
+static int rclinvar_parent_is(rclinvar_scan_state_t *state, const char *name) {
+    if (!state || state->stack_count < 2U) return 0;
+    return state->stack[state->stack_count - 2U].name &&
+           strcmp(state->stack[state->stack_count - 2U].name, name) == 0;
+}
+
+static int rclinvar_queue_entry(rclinvar_scan_state_t *state, const rclinvar_stack_entry_t *entry) {
+    rclinvar_entity_t *entity;
+    rclinvar_stack_entry_t *rcv;
+    rclinvar_stack_entry_t *scv;
+    if (!entry || !entry->semantic_type || !entry->semantic_id) return 1;
+    if (!rclinvar_entities_reserve(state, state->entity_count + 1U)) return 0;
+    entity = &state->entities[state->entity_count];
+    entity->record_ordinal = state->record_ordinal;
+    entity->entity_ordinal = ++state->entity_ordinal;
+    rcv = rclinvar_nearest_type(state, "rcv_assertion");
+    scv = rclinvar_nearest_type(state, "scv_assertion");
+    entity->vcv_accession = rclinvar_strdup(state->vcv_accession ? state->vcv_accession : "");
+    entity->rcv_entity_id = strcmp(entry->semantic_type, "rcv_assertion") == 0 ?
+                            rclinvar_strdup(entry->semantic_id) :
+                            (rcv ? rclinvar_strdup(rcv->semantic_id) : NULL);
+    entity->scv_entity_id = strcmp(entry->semantic_type, "scv_assertion") == 0 ?
+                            rclinvar_strdup(entry->semantic_id) :
+                            (scv ? rclinvar_strdup(scv->semantic_id) : NULL);
+    entity->entity_type = rclinvar_strdup(entry->semantic_type);
+    entity->entity_id = rclinvar_strdup(entry->semantic_id);
+    entity->parent_type = entry->parent_type ? rclinvar_strdup(entry->parent_type) : NULL;
+    entity->parent_id = entry->parent_id ? rclinvar_strdup(entry->parent_id) : NULL;
+    entity->fields_json = rclinvar_fields_json(entry);
+    if (!entity->vcv_accession || !entity->entity_type || !entity->entity_id || !entity->fields_json ||
+        (entry->parent_type && !entity->parent_type) || (entry->parent_id && !entity->parent_id) ||
+        ((rcv || strcmp(entry->semantic_type, "rcv_assertion") == 0) && !entity->rcv_entity_id) ||
+        ((scv || strcmp(entry->semantic_type, "scv_assertion") == 0) && !entity->scv_entity_id)) {
+        rclinvar_entity_clear(entity);
+        rclinvar_set_error(state, "out of memory queuing ClinVar entity");
         return 0;
     }
-    state->fact_count++;
+    state->entity_count++;
     return 1;
 }
 
 static void rclinvar_stack_entry_clear(rclinvar_stack_entry_t *entry) {
+    size_t i;
     if (!entry) return;
     free(entry->name);
     free(entry->semantic_type);
@@ -252,6 +399,8 @@ static void rclinvar_stack_entry_clear(rclinvar_stack_entry_t *entry) {
     free(entry->id_attribute);
     free(entry->contributes_attribute);
     free(entry->text);
+    for (i = 0; i < entry->field_count; i++) rclinvar_field_clear(&entry->fields[i]);
+    free(entry->fields);
     memset(entry, 0, sizeof(*entry));
 }
 
@@ -272,41 +421,11 @@ static int rclinvar_stack_reserve(rclinvar_scan_state_t *state, size_t required)
         rclinvar_set_error(state, "out of memory allocating ClinVar XML stack");
         return 0;
     }
-    memset(stack + state->stack_capacity, 0, (capacity - state->stack_capacity) * sizeof(*stack));
+    memset(stack + state->stack_capacity, 0,
+           (capacity - state->stack_capacity) * sizeof(*stack));
     state->stack = stack;
     state->stack_capacity = capacity;
     return 1;
-}
-
-static rclinvar_stack_entry_t *rclinvar_nearest_semantic(rclinvar_scan_state_t *state) {
-    size_t i = state ? state->stack_count : 0;
-    while (i) {
-        rclinvar_stack_entry_t *entry = &state->stack[--i];
-        if (entry->semantic_type && entry->semantic_id) return entry;
-    }
-    return NULL;
-}
-
-static rclinvar_stack_entry_t *rclinvar_nearest_type(rclinvar_scan_state_t *state, const char *semantic_type) {
-    size_t i = state ? state->stack_count : 0;
-    while (i) {
-        rclinvar_stack_entry_t *entry = &state->stack[--i];
-        if (entry->semantic_type && strcmp(entry->semantic_type, semantic_type) == 0) return entry;
-    }
-    return NULL;
-}
-
-static rclinvar_stack_entry_t *rclinvar_nearest_named(rclinvar_scan_state_t *state, const char *name) {
-    size_t i = state ? state->stack_count : 0;
-    while (i) {
-        rclinvar_stack_entry_t *entry = &state->stack[--i];
-        if (entry->name && strcmp(entry->name, name) == 0) return entry;
-    }
-    return NULL;
-}
-
-static int rclinvar_stack_contains(rclinvar_scan_state_t *state, const char *name) {
-    return rclinvar_nearest_named(state, name) != NULL;
 }
 
 static int rclinvar_append_text(rclinvar_scan_state_t *state, const char *value) {
@@ -343,14 +462,13 @@ static int rclinvar_append_text(rclinvar_scan_state_t *state, const char *value)
     return 1;
 }
 
-static int rclinvar_emit_entry(rclinvar_scan_state_t *state, const rclinvar_stack_entry_t *entry,
+static int rclinvar_emit_entry(rclinvar_scan_state_t *state, rclinvar_stack_entry_t *entry,
                                const char *field, const char *value) {
-    return rclinvar_emit(state, entry->semantic_type, entry->semantic_id,
-                         entry->parent_type, entry->parent_id, field, value);
+    return rclinvar_entry_set_field(state, entry, field, value);
 }
 
 static int rclinvar_emit_reader_attributes(rclinvar_scan_state_t *state, xmlTextReaderPtr reader,
-                                           const rclinvar_stack_entry_t *entry) {
+                                           rclinvar_stack_entry_t *entry) {
     int status = xmlTextReaderMoveToFirstAttribute(reader);
     while (status == 1) {
         const xmlChar *name = xmlTextReaderConstLocalName(reader);
@@ -372,7 +490,7 @@ static int rclinvar_emit_reader_attributes(rclinvar_scan_state_t *state, xmlText
 }
 
 static int rclinvar_emit_attribute_if_present(rclinvar_scan_state_t *state, xmlTextReaderPtr reader,
-                                              const rclinvar_stack_entry_t *entry,
+                                              rclinvar_stack_entry_t *entry,
                                               const char *xml_name, const char *field) {
     char *value = rclinvar_attribute(reader, xml_name);
     int ok = 1;
@@ -382,8 +500,7 @@ static int rclinvar_emit_attribute_if_present(rclinvar_scan_state_t *state, xmlT
 }
 
 static int rclinvar_transfer_attributes(rclinvar_scan_state_t *state, xmlTextReaderPtr reader,
-                                        const char *local_name,
-                                        const rclinvar_stack_entry_t *context) {
+                                        const char *local_name, rclinvar_stack_entry_t *context) {
     if (!context) return 1;
     if (strcmp(local_name, "ClinVarAccession") == 0 && strcmp(context->semantic_type, "scv_assertion") == 0) {
         return rclinvar_emit_attribute_if_present(state, reader, context, "Accession", "scv_accession") &&
@@ -412,7 +529,7 @@ static int rclinvar_transfer_attributes(rclinvar_scan_state_t *state, xmlTextRea
                rclinvar_emit_attribute_if_present(state, reader, context, "DateCreated", "classification_date_created") &&
                rclinvar_emit_attribute_if_present(state, reader, context, "MostRecentSubmission", "most_recent_submission");
     }
-    if (strcmp(local_name, "Description") == 0 && rclinvar_stack_contains(state, "GermlineClassification")) {
+    if (strcmp(local_name, "Description") == 0 && rclinvar_parent_is(state, "GermlineClassification")) {
         return rclinvar_emit_attribute_if_present(state, reader, context, "DateLastEvaluated", "date_last_evaluated") &&
                rclinvar_emit_attribute_if_present(state, reader, context, "SubmissionCount", "submission_count");
     }
@@ -425,6 +542,7 @@ static int rclinvar_semantic_start(rclinvar_scan_state_t *state, xmlTextReaderPt
     char *identifier = NULL;
     const char *scope = parent ? parent->semantic_id : state->vcv_accession;
     uint64_t ordinal = 0;
+    int within_scv = rclinvar_nearest_type(state, "scv_assertion") != NULL;
 
     if (strcmp(local_name, "VariationArchive") == 0) {
         entry->semantic_type = rclinvar_strdup("variation");
@@ -452,10 +570,10 @@ static int rclinvar_semantic_start(rclinvar_scan_state_t *state, xmlTextReaderPt
     } else if (strcmp(local_name, "ClinicalAssertion") == 0) {
         entry->semantic_type = rclinvar_strdup("scv_assertion");
         identifier = rclinvar_attribute(reader, "ID");
-        entry->semantic_id = rclinvar_scoped_id(state->vcv_accession, "assertion", identifier ? strtoull(identifier, NULL, 10) : state->fact_ordinal + 1U);
+        ordinal = identifier ? strtoull(identifier, NULL, 10) : ++state->assertion_ordinal;
+        entry->semantic_id = rclinvar_scoped_id(state->vcv_accession, "assertion", ordinal);
     } else if ((strcmp(local_name, "ClassifiedCondition") == 0 && parent && strcmp(parent->semantic_type, "rcv_assertion") == 0) ||
-               (strcmp(local_name, "Trait") == 0 && parent &&
-                (strcmp(parent->semantic_type, "variation") == 0 || strcmp(parent->semantic_type, "scv_assertion") == 0))) {
+               (strcmp(local_name, "Trait") == 0 && parent && strcmp(parent->semantic_type, "scv_assertion") == 0)) {
         entry->semantic_type = rclinvar_strdup("condition");
         ordinal = ++state->condition_ordinal;
         entry->semantic_id = rclinvar_scoped_id(scope, "condition", ordinal);
@@ -463,7 +581,7 @@ static int rclinvar_semantic_start(rclinvar_scan_state_t *state, xmlTextReaderPt
         entry->semantic_type = rclinvar_strdup("observation");
         ordinal = ++state->observation_ordinal;
         entry->semantic_id = rclinvar_scoped_id(scope, "observation", ordinal);
-    } else if (strcmp(local_name, "Citation") == 0 && parent) {
+    } else if (strcmp(local_name, "Citation") == 0 && parent && within_scv) {
         entry->semantic_type = rclinvar_strdup("citation");
         ordinal = ++state->citation_ordinal;
         entry->semantic_id = rclinvar_scoped_id(scope, "citation", ordinal);
@@ -472,11 +590,12 @@ static int rclinvar_semantic_start(rclinvar_scan_state_t *state, xmlTextReaderPt
         ordinal = ++state->citation_identifier_ordinal;
         entry->semantic_id = rclinvar_scoped_id(scope, "identifier", ordinal);
     } else if (strcmp(local_name, "XRef") == 0 && parent &&
-               (strcmp(parent->semantic_type, "condition") == 0 || strcmp(parent->semantic_type, "allele") == 0)) {
+               (strcmp(parent->semantic_type, "allele") == 0 ||
+                (within_scv && strcmp(parent->semantic_type, "condition") == 0))) {
         entry->semantic_type = rclinvar_strdup("xref");
         ordinal = ++state->xref_ordinal;
         entry->semantic_id = rclinvar_scoped_id(scope, "xref", ordinal);
-    } else if (strcmp(local_name, "Attribute") == 0 && parent) {
+    } else if (strcmp(local_name, "Attribute") == 0 && parent && within_scv) {
         entry->semantic_type = rclinvar_strdup("attribute");
         ordinal = ++state->attribute_ordinal;
         entry->semantic_id = rclinvar_scoped_id(scope, "attribute", ordinal);
@@ -485,7 +604,7 @@ static int rclinvar_semantic_start(rclinvar_scan_state_t *state, xmlTextReaderPt
         entry->semantic_type = rclinvar_strdup("condition_name");
         ordinal = ++state->name_ordinal;
         entry->semantic_id = rclinvar_scoped_id(scope, "name", ordinal);
-    } else if ((strcmp(local_name, "Comment") == 0 || strcmp(local_name, "CitationText") == 0) && parent) {
+    } else if ((strcmp(local_name, "Comment") == 0 || strcmp(local_name, "CitationText") == 0) && parent && within_scv) {
         entry->semantic_type = rclinvar_strdup("text");
         ordinal = ++state->text_ordinal;
         entry->semantic_id = rclinvar_scoped_id(scope, "text", ordinal);
@@ -505,8 +624,7 @@ static int rclinvar_semantic_start(rclinvar_scan_state_t *state, xmlTextReaderPt
         }
     }
     if (entry->semantic_type) {
-        if (!rclinvar_emit_entry(state, entry, "_present", "true") ||
-            !rclinvar_emit_reader_attributes(state, reader, entry)) return 0;
+        if (!rclinvar_emit_reader_attributes(state, reader, entry)) return 0;
         if (strcmp(entry->semantic_type, "text") == 0) {
             const char *section = strcmp(local_name, "Comment") == 0 ? "comment" : "citation_text";
             if (!rclinvar_emit_entry(state, entry, "section", section)) return 0;
@@ -551,6 +669,7 @@ static int rclinvar_start_element(rclinvar_scan_state_t *state, xmlTextReaderPtr
     if (!entry->semantic_type && !rclinvar_transfer_attributes(state, reader, local_name, parent)) return 0;
     empty = xmlTextReaderIsEmptyElement(reader);
     if (empty) {
+        if (entry->semantic_type && !rclinvar_queue_entry(state, entry)) return 0;
         rclinvar_stack_entry_clear(entry);
         state->stack_count--;
     }
@@ -582,10 +701,10 @@ static int rclinvar_emit_element_text(rclinvar_scan_state_t *state, rclinvar_sta
     else if (strcmp(entry->name, "NumberTested") == 0) field = "number_tested";
     else if (strcmp(entry->name, "MethodType") == 0) field = "method_type";
     else if (strcmp(entry->name, "URL") == 0 && strcmp(context->semantic_type, "citation") == 0) field = "url";
-    else if ((strcmp(entry->name, "GermlineClassification") == 0 ||
-              strcmp(entry->name, "SomaticClinicalImpact") == 0 ||
-              strcmp(entry->name, "OncogenicityClassification") == 0 ||
-              (strcmp(entry->name, "Description") == 0 && rclinvar_stack_contains(state, "GermlineClassification"))))
+    else if (strcmp(entry->name, "GermlineClassification") == 0 ||
+             strcmp(entry->name, "SomaticClinicalImpact") == 0 ||
+             strcmp(entry->name, "OncogenicityClassification") == 0 ||
+             (strcmp(entry->name, "Description") == 0 && rclinvar_parent_is(state, "GermlineClassification")))
         field = "classification";
     else if (strcmp(entry->name, "Name") == 0 && strcmp(context->semantic_type, "allele") == 0)
         field = "name";
@@ -600,6 +719,7 @@ static int rclinvar_end_element(rclinvar_scan_state_t *state, const char *local_
     entry = &state->stack[state->stack_count - 1U];
     ending_record = strcmp(local_name, "VariationArchive") == 0;
     if (!rclinvar_emit_element_text(state, entry)) return 0;
+    if (entry->semantic_type && !rclinvar_queue_entry(state, entry)) return 0;
     rclinvar_stack_entry_clear(entry);
     state->stack_count--;
     if (ending_record) {
@@ -612,7 +732,8 @@ static int rclinvar_end_element(rclinvar_scan_state_t *state, const char *local_
 
 static int rclinvar_start_record(rclinvar_scan_state_t *state, xmlTextReaderPtr reader) {
     state->record_ordinal++;
-    state->fact_ordinal = 0;
+    state->entity_ordinal = 0;
+    state->assertion_ordinal = 0;
     state->allele_ordinal = 0;
     state->gene_ordinal = 0;
     state->location_ordinal = 0;
@@ -634,14 +755,14 @@ static int rclinvar_start_record(rclinvar_scan_state_t *state, xmlTextReaderPtr 
     return rclinvar_start_element(state, reader, "VariationArchive");
 }
 
-/* Reads until at least one fact is queued, EOF, or an error. */
+/* Reads until at least one entity is queued, EOF, or an error. */
 static int rclinvar_scan_next(rclinvar_scan_state_t *state) {
     int rc;
-    while (!state->finished && state->fact_pos == state->fact_count) {
+    while (!state->finished && state->entity_pos == state->entity_count) {
         int node_type;
         const xmlChar *local;
         const xmlChar *value;
-        rclinvar_facts_reset(state);
+        rclinvar_entities_reset(state);
         rc = xmlTextReaderRead(state->reader);
         if (rc == 0) {
             state->finished = 1;
@@ -672,20 +793,26 @@ static int rclinvar_scan_next(rclinvar_scan_state_t *state) {
         } else if (state->active_record && node_type == XML_READER_TYPE_COMMENT) {
             rclinvar_stack_entry_t *context = rclinvar_nearest_semantic(state);
             value = xmlTextReaderConstValue(state->reader);
-            if (context && value && !rclinvar_is_whitespace((const char *)value)) {
-                char *id = rclinvar_scoped_id(context->semantic_id, "text", ++state->text_ordinal);
-                if (!id || !rclinvar_emit(state, "text", id, context->semantic_type,
-                                          context->semantic_id, "section", "xml_comment") ||
-                    !rclinvar_emit(state, "text", id, context->semantic_type,
-                                   context->semantic_id, "value", (const char *)value)) {
-                    free(id);
+            if (context && value && !rclinvar_is_whitespace((const char *)value) &&
+                rclinvar_nearest_type(state, "scv_assertion")) {
+                rclinvar_stack_entry_t standalone;
+                memset(&standalone, 0, sizeof(standalone));
+                standalone.semantic_type = rclinvar_strdup("text");
+                standalone.semantic_id = rclinvar_scoped_id(context->semantic_id, "text", ++state->text_ordinal);
+                standalone.parent_type = rclinvar_strdup(context->semantic_type);
+                standalone.parent_id = rclinvar_strdup(context->semantic_id);
+                if (!standalone.semantic_type || !standalone.semantic_id || !standalone.parent_type || !standalone.parent_id ||
+                    !rclinvar_emit_entry(state, &standalone, "section", "xml_comment") ||
+                    !rclinvar_emit_entry(state, &standalone, "value", (const char *)value) ||
+                    !rclinvar_queue_entry(state, &standalone)) {
+                    rclinvar_stack_entry_clear(&standalone);
                     return -1;
                 }
-                free(id);
+                rclinvar_stack_entry_clear(&standalone);
             }
         }
     }
-    return state->fact_pos < state->fact_count ? 1 : 0;
+    return state->entity_pos < state->entity_count ? 1 : 0;
 }
 
 static void rclinvar_bind_destroy(void *pointer) {
@@ -700,8 +827,8 @@ static void rclinvar_scan_destroy(void *pointer) {
     rclinvar_scan_state_t *state = (rclinvar_scan_state_t *)pointer;
     if (!state) return;
     if (state->reader) xmlFreeTextReader(state->reader);
-    for (i = 0; i < state->fact_count; i++) rclinvar_fact_clear(&state->facts[i]);
-    free(state->facts);
+    for (i = 0; i < state->entity_count; i++) rclinvar_entity_clear(&state->entities[i]);
+    free(state->entities);
     for (i = 0; i < state->stack_count; i++) rclinvar_stack_entry_clear(&state->stack[i]);
     free(state->stack);
     free(state->vcv_accession);
@@ -719,7 +846,7 @@ static void rclinvar_xml_bind(duckdb_bind_info info) {
     char *path = NULL;
     rclinvar_bind_state_t *state = NULL;
     if (duckdb_bind_get_parameter_count(info) != 1U) {
-        duckdb_bind_set_error(info, "clinvar_xml_facts() requires exactly one XML or XML.GZ path");
+        duckdb_bind_set_error(info, "clinvar_xml_entities() requires exactly one XML or XML.GZ path");
         return;
     }
     value = duckdb_bind_get_parameter(info, 0);
@@ -727,13 +854,13 @@ static void rclinvar_xml_bind(duckdb_bind_info info) {
     if (value) duckdb_destroy_value(&value);
     if (!path || !path[0]) {
         if (path) duckdb_free(path);
-        duckdb_bind_set_error(info, "clinvar_xml_facts() path must be a non-empty string");
+        duckdb_bind_set_error(info, "clinvar_xml_entities() path must be a non-empty string");
         return;
     }
     state = (rclinvar_bind_state_t *)calloc(1, sizeof(*state));
     if (!state) {
         duckdb_free(path);
-        duckdb_bind_set_error(info, "out of memory binding clinvar_xml_facts()");
+        duckdb_bind_set_error(info, "out of memory binding clinvar_xml_entities()");
         return;
     }
     state->path = rclinvar_strdup(path);
@@ -744,7 +871,7 @@ static void rclinvar_xml_bind(duckdb_bind_info info) {
         return;
     }
     rclinvar_add_column(info, "record_ordinal", DUCKDB_TYPE_UBIGINT);
-    rclinvar_add_column(info, "fact_ordinal", DUCKDB_TYPE_UBIGINT);
+    rclinvar_add_column(info, "entity_ordinal", DUCKDB_TYPE_UBIGINT);
     rclinvar_add_column(info, "vcv_accession", DUCKDB_TYPE_VARCHAR);
     rclinvar_add_column(info, "rcv_entity_id", DUCKDB_TYPE_VARCHAR);
     rclinvar_add_column(info, "scv_entity_id", DUCKDB_TYPE_VARCHAR);
@@ -752,8 +879,7 @@ static void rclinvar_xml_bind(duckdb_bind_info info) {
     rclinvar_add_column(info, "entity_id", DUCKDB_TYPE_VARCHAR);
     rclinvar_add_column(info, "parent_type", DUCKDB_TYPE_VARCHAR);
     rclinvar_add_column(info, "parent_id", DUCKDB_TYPE_VARCHAR);
-    rclinvar_add_column(info, "field", DUCKDB_TYPE_VARCHAR);
-    rclinvar_add_column(info, "value", DUCKDB_TYPE_VARCHAR);
+    rclinvar_add_column(info, "fields_json", DUCKDB_TYPE_VARCHAR);
     duckdb_bind_set_bind_data(info, state, rclinvar_bind_destroy);
 }
 
@@ -761,7 +887,7 @@ static void rclinvar_xml_init(duckdb_init_info info) {
     const rclinvar_bind_state_t *bind = (const rclinvar_bind_state_t *)duckdb_init_get_bind_data(info);
     rclinvar_scan_state_t *state;
     if (!bind || !bind->path) {
-        duckdb_init_set_error(info, "clinvar_xml_facts() bind state is missing");
+        duckdb_init_set_error(info, "clinvar_xml_entities() bind state is missing");
         return;
     }
     state = (rclinvar_scan_state_t *)calloc(1, sizeof(*state));
@@ -786,7 +912,7 @@ static void rclinvar_set_null(duckdb_vector vector, idx_t row) {
     duckdb_validity_set_row_invalid(validity, row);
 }
 
-static void rclinvar_assign_fact(duckdb_data_chunk output, idx_t row, rclinvar_fact_t *fact) {
+static void rclinvar_assign_entity(duckdb_data_chunk output, idx_t row, rclinvar_entity_t *entity) {
     uint64_t *record = (uint64_t *)duckdb_vector_get_data(duckdb_data_chunk_get_vector(output, 0));
     uint64_t *ordinal = (uint64_t *)duckdb_vector_get_data(duckdb_data_chunk_get_vector(output, 1));
     duckdb_vector vcv = duckdb_data_chunk_get_vector(output, 2);
@@ -796,37 +922,35 @@ static void rclinvar_assign_fact(duckdb_data_chunk output, idx_t row, rclinvar_f
     duckdb_vector entity_id = duckdb_data_chunk_get_vector(output, 6);
     duckdb_vector parent_type = duckdb_data_chunk_get_vector(output, 7);
     duckdb_vector parent_id = duckdb_data_chunk_get_vector(output, 8);
-    duckdb_vector field = duckdb_data_chunk_get_vector(output, 9);
-    duckdb_vector value = duckdb_data_chunk_get_vector(output, 10);
-    record[row] = fact->record_ordinal;
-    ordinal[row] = fact->fact_ordinal;
-    duckdb_vector_assign_string_element(vcv, row, fact->vcv_accession);
-    if (fact->rcv_entity_id) duckdb_vector_assign_string_element(rcv, row, fact->rcv_entity_id);
+    duckdb_vector fields_json = duckdb_data_chunk_get_vector(output, 9);
+    record[row] = entity->record_ordinal;
+    ordinal[row] = entity->entity_ordinal;
+    duckdb_vector_assign_string_element(vcv, row, entity->vcv_accession);
+    if (entity->rcv_entity_id) duckdb_vector_assign_string_element(rcv, row, entity->rcv_entity_id);
     else rclinvar_set_null(rcv, row);
-    if (fact->scv_entity_id) duckdb_vector_assign_string_element(scv, row, fact->scv_entity_id);
+    if (entity->scv_entity_id) duckdb_vector_assign_string_element(scv, row, entity->scv_entity_id);
     else rclinvar_set_null(scv, row);
-    duckdb_vector_assign_string_element(entity_type, row, fact->entity_type);
-    duckdb_vector_assign_string_element(entity_id, row, fact->entity_id);
-    if (fact->parent_type) duckdb_vector_assign_string_element(parent_type, row, fact->parent_type);
+    duckdb_vector_assign_string_element(entity_type, row, entity->entity_type);
+    duckdb_vector_assign_string_element(entity_id, row, entity->entity_id);
+    if (entity->parent_type) duckdb_vector_assign_string_element(parent_type, row, entity->parent_type);
     else rclinvar_set_null(parent_type, row);
-    if (fact->parent_id) duckdb_vector_assign_string_element(parent_id, row, fact->parent_id);
+    if (entity->parent_id) duckdb_vector_assign_string_element(parent_id, row, entity->parent_id);
     else rclinvar_set_null(parent_id, row);
-    duckdb_vector_assign_string_element(field, row, fact->field);
-    duckdb_vector_assign_string_element(value, row, fact->value);
+    duckdb_vector_assign_string_element(fields_json, row, entity->fields_json);
 }
 
 static void rclinvar_xml_function(duckdb_function_info info, duckdb_data_chunk output) {
     rclinvar_scan_state_t *state = (rclinvar_scan_state_t *)duckdb_function_get_init_data(info);
     idx_t count = 0;
     if (!state) {
-        duckdb_function_set_error(info, "clinvar_xml_facts() scan state is missing");
+        duckdb_function_set_error(info, "clinvar_xml_entities() scan state is missing");
         duckdb_data_chunk_set_size(output, 0);
         return;
     }
     while (count < RCLINVAR_CHUNK_SIZE) {
-        rclinvar_fact_t fact;
+        rclinvar_entity_t entity;
         int status;
-        if (state->fact_pos >= state->fact_count) {
+        if (state->entity_pos >= state->entity_count) {
             status = rclinvar_scan_next(state);
             if (status < 0) {
                 duckdb_function_set_error(info, state->error[0] ? state->error : "ClinVar XML scan failed");
@@ -835,17 +959,17 @@ static void rclinvar_xml_function(duckdb_function_info info, duckdb_data_chunk o
             }
             if (status == 0) break;
         }
-        fact = state->facts[state->fact_pos];
-        memset(&state->facts[state->fact_pos], 0, sizeof(fact));
-        state->fact_pos++;
-        rclinvar_assign_fact(output, count, &fact);
-        rclinvar_fact_clear(&fact);
+        entity = state->entities[state->entity_pos];
+        memset(&state->entities[state->entity_pos], 0, sizeof(entity));
+        state->entity_pos++;
+        rclinvar_assign_entity(output, count, &entity);
+        rclinvar_entity_clear(&entity);
         count++;
     }
     duckdb_data_chunk_set_size(output, count);
 }
 
-static bool rclinvar_register_xml_facts(duckdb_connection connection) {
+static bool rclinvar_register_xml_entities(duckdb_connection connection) {
     duckdb_table_function function = duckdb_create_table_function();
     duckdb_logical_type parameter_type;
     duckdb_state status;
@@ -855,7 +979,7 @@ static bool rclinvar_register_xml_facts(duckdb_connection connection) {
         duckdb_destroy_table_function(&function);
         return false;
     }
-    duckdb_table_function_set_name(function, "clinvar_xml_facts");
+    duckdb_table_function_set_name(function, "clinvar_xml_entities");
     duckdb_table_function_add_parameter(function, parameter_type);
     duckdb_destroy_logical_type(&parameter_type);
     duckdb_table_function_set_bind(function, rclinvar_xml_bind);
@@ -870,8 +994,8 @@ DUCKDB_EXTENSION_ENTRYPOINT(duckdb_connection connection,
                             duckdb_extension_info info,
                             struct duckdb_extension_access *access) {
     xmlInitParser();
-    if (!rclinvar_register_xml_facts(connection)) {
-        access->set_error(info, "failed to register clinvar_xml_facts()");
+    if (!rclinvar_register_xml_entities(connection)) {
+        access->set_error(info, "failed to register clinvar_xml_entities()");
         return false;
     }
     return true;
