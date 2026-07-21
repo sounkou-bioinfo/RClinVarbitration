@@ -59,7 +59,7 @@ jobs:
             github::duckdb/duckdb-r@v${{ matrix.duckdb }},
             local::.
           needs: check
-          dependencies: 'hard'
+          dependencies: '"hard"'
 
       - name: Check package
         run: make check
