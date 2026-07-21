@@ -62,13 +62,5 @@ jobs:
           needs: check
           dependencies: '"hard"'
 
-      - name: Install DuckDB JSON extension
-        shell: Rscript {0}
-        run: |
-          con <- DBI::dbConnect(duckdb::duckdb())
-          on.exit(DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
-          DBI::dbExecute(con, "INSTALL json")
-          DBI::dbExecute(con, "LOAD json")
-
       - name: Check package
         run: make check

@@ -26,6 +26,36 @@ rclinvarbitration_bundled_duckdb_versions <- function(root) {
   paste0("v", as.character(sort(numeric_version(sub("^v", "", versions)))))
 }
 
+rclinvarbitration_enable_json <- function(con) {
+  loaded <- tryCatch({
+    DBI::dbExecute(con, "LOAD json")
+    TRUE
+  }, error = function(e) FALSE)
+  if (loaded) return(invisible(con))
+
+  installed <- tryCatch({
+    DBI::dbExecute(con, "INSTALL json")
+    TRUE
+  }, error = function(e) {
+    stop(
+      "DuckDB's official JSON extension is required for ClinVar entity projection. ",
+      "Could not install it automatically: ", conditionMessage(e),
+      ". Install it on this connection with `INSTALL json` and retry.",
+      call. = FALSE
+    )
+  })
+  if (installed) {
+    tryCatch(
+      DBI::dbExecute(con, "LOAD json"),
+      error = function(e) stop(
+        "DuckDB installed its JSON extension but could not load it: ", conditionMessage(e),
+        call. = FALSE
+      )
+    )
+  }
+  invisible(con)
+}
+
 #' Locate a version-matched RClinVarbitration DuckDB extension
 #'
 #' The package uses DuckDB's unstable C extension ABI for its streaming table
@@ -63,11 +93,14 @@ rclinvarbitration_extension_path <- function(duckdb_version = NULL) {
 
 #' Enable native ClinVar XML scanning on a DuckDB connection
 #'
-#' Loads the package-owned `rclinvarbitration` extension. Its native
-#' `clinvar_xml_entities(path)` table function is the compact, ClinVar-specific
-#' one-pass staging surface used by [rclinvarbitration_import_xml()]. The connection must have been
-#' created with `duckdb::duckdb(config = list(allow_unsigned_extensions =
-#' "true"))`, as for any locally built DuckDB extension.
+#' Loads the package-owned `rclinvarbitration` extension and DuckDB's official
+#' JSON extension. The latter is downloaded through DuckDB on first use when it
+#' is not already installed; JSON is required to project compact parser rows.
+#' Its native `clinvar_xml_entities(path)` table function is the compact,
+#' ClinVar-specific one-pass staging surface used by
+#' [rclinvarbitration_import_xml()]. The connection must have been created with
+#' `duckdb::duckdb(config = list(allow_unsigned_extensions = "true"))`, as for
+#' any locally built DuckDB extension.
 #'
 #' @param con A DuckDB DBI connection.
 #' @param extension_path Optional explicit exact-version extension path.
@@ -82,5 +115,6 @@ rclinvarbitration_enable <- function(con, extension_path = NULL) {
   }
   extension_path <- normalizePath(extension_path, mustWork = TRUE)
   DBI::dbExecute(con, paste("LOAD", rclinvarbitration_sql_string(extension_path)))
+  rclinvarbitration_enable_json(con)
   invisible(con)
 }

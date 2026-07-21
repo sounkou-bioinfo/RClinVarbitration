@@ -68,7 +68,11 @@ regression fixture. A **file-backed** DuckDB holds the complete import
 so every following query reuses the same data rather than rescanning
 XML. Set `CLINVAR_DUCKDB_FILE` to retain and reuse a completed import
 across renders; otherwise the executable document uses a temporary
-database.
+database. On first use, `rclinvarbitration_enable()` installs DuckDB’s
+official, version-matched JSON extension when necessary. The connection
+therefore needs permission to download DuckDB extensions once; a
+restricted environment can run `INSTALL json` on the connection before
+enabling RClinVarbitration.
 
 ``` r
 library(DBI)
@@ -349,8 +353,8 @@ knitr::kable(pathogenic_examples, row.names = FALSE)
 
 | vcv_accession | allele_id | disease_database | disease_identifier | disease_name                            | gold_stars | assembly | chromosome | position_vcf | reference | alternate              |
 |:--------------|----------:|:-----------------|:-------------------|:----------------------------------------|-----------:|:---------|:-----------|-------------:|:----------|:-----------------------|
-| VCV000000002  |     15041 | OMIM             | 613647             | <not supplied by ClinVar>               |          1 | GRCh38   | 7          |      4781213 | GGAT      | TGCTGTAAACTGTAACTGTAAA |
 | VCV000000002  |     15041 | OMIM             | 613647             | <not supplied by ClinVar>               |          1 | GRCh37   | 7          |      4820844 | GGAT      | TGCTGTAAACTGTAACTGTAAA |
+| VCV000000002  |     15041 | OMIM             | 613647             | <not supplied by ClinVar>               |          1 | GRCh38   | 7          |      4781213 | GGAT      | TGCTGTAAACTGTAACTGTAAA |
 | VCV000000005  |     15044 | MedGen           | C0023264           | Leigh syndrome                          |          1 | GRCh38   | 11         |    126275389 | C         | T                      |
 | VCV000000005  |     15044 | MedGen           | C0023264           | Leigh syndrome                          |          1 | GRCh37   | 11         |    126145284 | C         | T                      |
 | VCV000000005  |     15044 | MedGen           | CN517202           | <not supplied by ClinVar>               |          1 | GRCh37   | 11         |    126145284 | C         | T                      |
@@ -453,12 +457,12 @@ knitr::kable(evidence, row.names = FALSE)
 
 | scv_accession | submitter_name | excerpt                                                                                                                                                                           |
 |:--------------|:---------------|:----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| SCV000020146  | OMIM           | Reason: Other                                                                                                                                                                     |
 | SCV000020146  | OMIM           | Notes: Flagging candidate with reason of insufficient supporting evidence. This gene has been classified as having a limited gene-disease relationship by a ClinGen Expert Panel. |
+| SCV000020146  | OMIM           | Reason: Other                                                                                                                                                                     |
 | SCV000020162  | OMIM           | Reason: Older and outlier claim with insufficient supporting evidence                                                                                                             |
 | SCV000020162  | OMIM           | Notes: None                                                                                                                                                                       |
-| SCV000020201  | OMIM           | Notes: None                                                                                                                                                                       |
 | SCV000020201  | OMIM           | Reason: Outlier claim with insufficient supporting evidence                                                                                                                       |
+| SCV000020201  | OMIM           | Notes: None                                                                                                                                                                       |
 | SCV000020580  | OMIM           | Until October, 2023, the haplotype reported in OMIM’s allelic variant 613018.0004 was erroneously represented in ClinVar as a simple allele.                                      |
 | SCV000020787  | OMIM           | SCV000020796 was merged into SCV000020787 to remove duplication.                                                                                                                  |
 

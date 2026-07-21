@@ -69,7 +69,11 @@ The executable README requires the complete local
 fixture. A **file-backed** DuckDB holds the complete import so every following
 query reuses the same data rather than rescanning XML. Set
 `CLINVAR_DUCKDB_FILE` to retain and reuse a completed import across renders;
-otherwise the executable document uses a temporary database.
+otherwise the executable document uses a temporary database. On first use,
+`rclinvarbitration_enable()` installs DuckDB's official, version-matched JSON
+extension when necessary. The connection therefore needs permission to download
+DuckDB extensions once; a restricted environment can run `INSTALL json` on the
+connection before enabling RClinVarbitration.
 
 ```{r import-full-release}
 library(DBI)

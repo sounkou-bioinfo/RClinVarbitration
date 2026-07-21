@@ -8,8 +8,19 @@ expect_equal(basename(dirname(artifact_paths)), supported_versions)
 expect_true(all(file.exists(artifact_paths)))
 expect_error(rclinvarbitration_extension_path("v1.4.3"), "no artifact")
 
-con <- DBI::dbConnect(duckdb::duckdb(config = list(allow_unsigned_extensions = "true")))
+extension_directory <- tempfile("rclinvarbitration-duckdb-extensions-")
+con <- DBI::dbConnect(duckdb::duckdb(config = list(
+  allow_unsigned_extensions = "true",
+  extension_directory = extension_directory
+)))
 rclinvarbitration_enable(con)
+json_extension <- DBI::dbGetQuery(con, paste(
+  "SELECT installed, loaded, install_path FROM duckdb_extensions()",
+  "WHERE extension_name = 'json'"
+))
+expect_true(json_extension$installed)
+expect_true(json_extension$loaded)
+expect_true(startsWith(json_extension$install_path, extension_directory))
 fixture_sql <- as.character(DBI::dbQuoteString(con, fixture))
 
 entities <- DBI::dbGetQuery(con, paste0(

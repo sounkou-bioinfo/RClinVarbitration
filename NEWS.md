@@ -1,5 +1,9 @@
 # RClinVarbitration 0.1.1
 
+- Load DuckDB's official JSON extension through `rclinvarbitration_enable()`;
+  install it automatically when absent, with an actionable error when the
+  connection cannot download extensions.
+
 - Remove the premature local `v1` policy suffix; preserve the pinned
   `cpg-clinvarbitration-2.2.11` identifier, source-order strong-review rule,
   and separate disease- and allele-level decision views.
