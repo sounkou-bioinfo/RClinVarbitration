@@ -17,7 +17,8 @@ rclinvarbitration_export_clinvarbitration_parquet(
   path,
   release_id,
   assembly = c("GRCh38", "GRCh37"),
-  profile_id = "default"
+  profile_id = "default",
+  submitter_exclusions = character()
 )
 ```
 
@@ -43,6 +44,13 @@ rclinvarbitration_export_clinvarbitration_parquet(
 - profile_id:
 
   Policy profile identifier, normally `"default"`.
+
+- submitter_exclusions:
+
+  Additional submitter names to exclude from this export. Matching is
+  case-insensitive and ignores surrounding whitespace. These exclusions
+  are combined with any exclusions already stored for `profile_id`;
+  imported source submissions are not deleted.
 
 ## Value
 

@@ -2,14 +2,14 @@
 
 Returns DuckDB views implementing the supported policy over
 `clinvar_disease_submissions`. The policy bins submitted
-classifications, excludes unknown bins and the upstream qualified
-Illumina benign exclusion, optionally applies profile-specific submitter
-exclusions, prefers evidence evaluated from 2016 onward while always
-retaining expert-panel and practice guideline evidence, and applies the
-60/20 majority rule. The disease-level and allele-level views both
-reproduce the upstream strong-review rule: the first retained
-practice-guideline or expert-panel classification in source order is
-decisive.
+classifications, excludes unknown bins and applies the upstream policy's
+intended qualified Illumina benign exclusion, optionally applies
+profile-specific submitter exclusions, prefers evidence evaluated from
+2016 onward while always retaining expert-panel and practice guideline
+evidence, and applies the 60/20 majority rule. The disease-level and
+allele-level views both reproduce the upstream strong-review rule: the
+first retained practice-guideline or expert-panel classification in
+source order is decisive.
 
 ## Usage
 
