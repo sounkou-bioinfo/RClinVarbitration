@@ -15,9 +15,9 @@ ClinVarbitration policy is deliberately derived from those source records.
 \seealso{
 Useful links:
 \itemize{
-  \item \url{https://github.com/sounkou-bioinfo/RClinVarbitration}
-  \item \url{https://sounkou-bioinfo.github.io/RClinVarbitration/}
-  \item Report bugs at \url{https://github.com/sounkou-bioinfo/RClinVarbitration/issues}
+  \item \url{https://github.com/RGenomicsETL/RClinVarbitration}
+  \item \url{https://rgenomicsetl.github.io/RClinVarbitration/}
+  \item Report bugs at \url{https://github.com/RGenomicsETL/RClinVarbitration/issues}
 }
 
 }
