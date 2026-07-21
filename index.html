@@ -154,7 +154,7 @@
 </table>
 <p><code>clinvar_locations</code> retains every source assembly location, including its VCF position, reference, and alternate alleles. <code>clinvar_normalized_alleles</code> exposes those normalized joins for GRCh37, GRCh38, and NCBI36; no GRCh37 coordinates are discarded.</p>
 <p>The release-scale tables retain explicit logical key columns but do not create DuckDB ART indexes: those indexes must remain memory-resident and are a poor fit for a complete analytical release. Only the small completion and policy-profile catalogues retain primary keys.</p>
-<p>The executable README requires the complete local <code>ClinVarVCVRelease_00-latest.xml.gz</code>, selected with <code>CLINVAR_VCV_XML_FILE</code>, and an explicit immutable release label in <code>CLINVAR_RELEASE_ID</code>. It does not substitute the bundled one-record regression fixture. A <strong>file-backed</strong> DuckDB holds the complete import so every following query reuses the same data rather than rescanning XML. Set <code>CLINVAR_DUCKDB_FILE</code> to retain and reuse a completed import across renders; otherwise the executable document uses a temporary database.</p>
+<p>The executable README requires the complete local <code>ClinVarVCVRelease_00-latest.xml.gz</code>, selected with <code>CLINVAR_VCV_XML_FILE</code>, and an explicit immutable release label in <code>CLINVAR_RELEASE_ID</code>. It does not substitute the bundled one-record regression fixture. A <strong>file-backed</strong> DuckDB holds the complete import so every following query reuses the same data rather than rescanning XML. Set <code>CLINVAR_DUCKDB_FILE</code> to retain and reuse a completed import across renders; otherwise the executable document uses a temporary database. On first use, <code><a href="reference/rclinvarbitration_enable.html">rclinvarbitration_enable()</a></code> installs DuckDB’s official, version-matched JSON extension when necessary. The connection therefore needs permission to download DuckDB extensions once; a restricted environment can run <code>INSTALL json</code> on the connection before enabling RClinVarbitration.</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://dbi.r-dbi.org" class="external-link">DBI</a></span><span class="op">)</span></span>
 <span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://r.duckdb.org/" class="external-link">duckdb</a></span><span class="op">)</span></span>
@@ -869,9 +869,9 @@
 <td align="left">613647</td>
 <td align="left"><not supplied by clinvar></not></td>
 <td align="right">1</td>
-<td align="left">GRCh38</td>
+<td align="left">GRCh37</td>
 <td align="left">7</td>
-<td align="right">4781213</td>
+<td align="right">4820844</td>
 <td align="left">GGAT</td>
 <td align="left">TGCTGTAAACTGTAACTGTAAA</td>
 </tr>
@@ -882,9 +882,9 @@
 <td align="left">613647</td>
 <td align="left"><not supplied by clinvar></not></td>
 <td align="right">1</td>
-<td align="left">GRCh37</td>
+<td align="left">GRCh38</td>
 <td align="left">7</td>
-<td align="right">4820844</td>
+<td align="right">4781213</td>
 <td align="left">GGAT</td>
 <td align="left">TGCTGTAAACTGTAACTGTAAA</td>
 </tr>
@@ -1116,12 +1116,12 @@
 <tr>
 <td align="left">SCV000020146</td>
 <td align="left">OMIM</td>
-<td align="left">Reason: Other</td>
+<td align="left">Notes: Flagging candidate with reason of insufficient supporting evidence. This gene has been classified as having a limited gene-disease relationship by a ClinGen Expert Panel.</td>
 </tr>
 <tr>
 <td align="left">SCV000020146</td>
 <td align="left">OMIM</td>
-<td align="left">Notes: Flagging candidate with reason of insufficient supporting evidence. This gene has been classified as having a limited gene-disease relationship by a ClinGen Expert Panel.</td>
+<td align="left">Reason: Other</td>
 </tr>
 <tr>
 <td align="left">SCV000020162</td>
@@ -1136,12 +1136,12 @@
 <tr>
 <td align="left">SCV000020201</td>
 <td align="left">OMIM</td>
-<td align="left">Notes: None</td>
+<td align="left">Reason: Outlier claim with insufficient supporting evidence</td>
 </tr>
 <tr>
 <td align="left">SCV000020201</td>
 <td align="left">OMIM</td>
-<td align="left">Reason: Outlier claim with insufficient supporting evidence</td>
+<td align="left">Notes: None</td>
 </tr>
 <tr>
 <td align="left">SCV000020580</td>
