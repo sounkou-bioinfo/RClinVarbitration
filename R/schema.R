@@ -124,6 +124,23 @@ rclinvarbitration_schema_sql <- function() {
       "rcv_entity_id TEXT, scv_entity_id TEXT, context_type TEXT NOT NULL, context_id TEXT NOT NULL,",
       "section TEXT NOT NULL, text TEXT NOT NULL)"
     ),
+    policy_profiles = paste(
+      "CREATE TABLE IF NOT EXISTS clinvar_policy_profiles (",
+      "policy_version TEXT NOT NULL, profile_id TEXT NOT NULL, description TEXT,",
+      "PRIMARY KEY (policy_version, profile_id))"
+    ),
+    policy_exclusions = paste(
+      "CREATE TABLE IF NOT EXISTS clinvar_policy_submitter_exclusions (",
+      "policy_version TEXT NOT NULL, profile_id TEXT NOT NULL,",
+      "submitter_name TEXT NOT NULL, classification_bin TEXT, reason TEXT)"
+    ),
+    default_policy_profile = paste0(
+      "INSERT INTO clinvar_policy_profiles ",
+      "SELECT '", rclinvarbitration_policy_version(), "', 'default', ",
+      "'CPG ClinVarbitration 2.2.11 defaults, adapted per disease' ",
+      "WHERE NOT EXISTS (SELECT 1 FROM clinvar_policy_profiles WHERE policy_version = '",
+      rclinvarbitration_policy_version(), "' AND profile_id = 'default')"
+    ),
     normalized_alleles = paste(
       "CREATE OR REPLACE VIEW clinvar_normalized_alleles AS SELECT",
       "a.release_id, a.vcv_accession, a.allele_id, a.variation_id,",
@@ -140,6 +157,11 @@ rclinvarbitration_schema_sql <- function() {
       "r.rcv_accession, r.rcv_version, r.title AS rcv_title,",
       "c.condition_id, c.trait_set_id, c.database_name AS disease_database,",
       "c.database_id AS disease_identifier, c.preferred_name AS disease_name,",
+      "CASE WHEN c.database_name IS NOT NULL AND c.database_id IS NOT NULL",
+      "THEN lower(trim(c.database_name)) || ':' || trim(c.database_id)",
+      "WHEN c.trait_set_id IS NOT NULL THEN 'clinvar-trait-set:' || c.trait_set_id",
+      "WHEN c.preferred_name IS NOT NULL THEN 'name:' || lower(trim(c.preferred_name))",
+      "ELSE 'condition:' || c.condition_id END AS disease_key,",
       "r.classification AS aggregate_classification,",
       "r.review_status AS aggregate_review_status,",
       "r.date_last_evaluated AS aggregate_date_last_evaluated,",
@@ -154,11 +176,19 @@ rclinvarbitration_schema_sql <- function() {
       "CREATE OR REPLACE VIEW clinvar_disease_submissions AS WITH names AS (",
       "SELECT release_id, condition_id,",
       "coalesce(max(name) FILTER (WHERE lower(name_type) = 'preferred'), max(name)) AS disease_name",
-      "FROM clinvar_condition_names GROUP BY release_id, condition_id)",
-      "SELECT s.release_id, s.vcv_accession, v.variation_id, a.allele_id,",
-      "s.scv_accession, s.scv_version, s.assertion_id, s.submitter_name, s.submitter_id,",
-      "s.classification, s.review_status, s.date_last_evaluated, s.submission_date,",
-      "s.contributes_to_aggregate_classification, c.condition_id, c.trait_set_id,",
+      "FROM clinvar_condition_names GROUP BY release_id, condition_id),",
+      "canonical_xrefs AS (SELECT release_id, context_id, database_name, database_id",
+      "FROM clinvar_xrefs WHERE context_type = 'condition' AND lower(database_name) IN",
+      "('medgen', 'mondo', 'omim', 'orphanet', 'mesh', 'umls', 'omim phenotypic series')",
+      "QUALIFY row_number() OVER (PARTITION BY release_id, context_id ORDER BY",
+      "CASE lower(database_name) WHEN 'medgen' THEN 0 WHEN 'mondo' THEN 1",
+      "WHEN 'omim' THEN 2 WHEN 'orphanet' THEN 3 WHEN 'mesh' THEN 4",
+      "WHEN 'umls' THEN 5 ELSE 6 END, database_name, database_id, xref_id) = 1),",
+      "linked AS (SELECT s.release_id, s.vcv_accession, v.variation_id, a.allele_id,",
+      "s.assertion_entity_id, s.scv_accession, s.scv_version, s.assertion_id,",
+      "s.submitter_name, s.submitter_id, s.classification, s.review_status,",
+      "s.date_last_evaluated, s.submission_date, s.contributes_to_aggregate_classification,",
+      "c.condition_id, c.trait_set_id,",
       "coalesce(c.database_name, x.database_name) AS disease_database,",
       "coalesce(c.database_id, x.database_id) AS disease_identifier,",
       "coalesce(c.preferred_name, n.disease_name) AS disease_name",
@@ -168,9 +198,14 @@ rclinvarbitration_schema_sql <- function() {
       "JOIN clinvar_conditions c ON c.release_id = s.release_id",
       "AND c.context_type = 'scv_assertion' AND c.context_id = s.assertion_entity_id",
       "LEFT JOIN names n ON n.release_id = c.release_id AND n.condition_id = c.condition_id",
-      "LEFT JOIN clinvar_xrefs x ON x.release_id = c.release_id",
-      "AND x.context_type = 'condition' AND x.context_id = c.condition_id"
-    )
+      "LEFT JOIN canonical_xrefs x ON x.release_id = c.release_id AND x.context_id = c.condition_id)",
+      "SELECT linked.*, CASE WHEN disease_database IS NOT NULL AND disease_identifier IS NOT NULL",
+      "THEN lower(trim(disease_database)) || ':' || trim(disease_identifier)",
+      "WHEN trait_set_id IS NOT NULL THEN 'clinvar-trait-set:' || trait_set_id",
+      "WHEN disease_name IS NOT NULL THEN 'name:' || lower(trim(disease_name))",
+      "ELSE 'condition:' || condition_id END AS disease_key FROM linked"
+    ),
+    rclinvarbitration_policy_sql()
   )
 }
 

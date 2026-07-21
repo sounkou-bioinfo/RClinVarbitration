@@ -105,12 +105,26 @@ expect_true(all(nzchar(disease_aggregates$disease_name)))
 expect_true(all(nzchar(disease_aggregates$aggregate_classification)))
 
 disease_submissions <- DBI::dbGetQuery(con, "
-  SELECT scv_accession, disease_database, disease_identifier, classification
+  SELECT scv_accession, disease_database, disease_identifier, disease_key, classification
   FROM clinvar_disease_submissions ORDER BY scv_accession
 ")
 expect_equal(nrow(disease_submissions), 6L)
 expect_equal(length(unique(disease_submissions$scv_accession)), 6L)
 expect_true(any(disease_submissions$disease_identifier == "C0027672", na.rm = TRUE))
+expect_true(all(nzchar(disease_submissions$disease_key)))
+
+policy <- DBI::dbGetQuery(con, "
+  SELECT policy_version, profile_id, disease_key, policy_classification, gold_stars
+  FROM clinvar_policy_decisions ORDER BY disease_key
+")
+expect_equal(nrow(policy), 5L)
+expect_equal(unique(policy$policy_version), rclinvarbitration_policy_version())
+expect_equal(unique(policy$profile_id), "default")
+expect_true(all(policy$policy_classification == "Pathogenic/Likely Pathogenic"))
+expect_equal(
+  DBI::dbGetQuery(con, "SELECT count(*) AS n FROM clinvar_policy_pathogenic_alleles")$n,
+  10
+)
 
 text <- DBI::dbGetQuery(con, "
   SELECT s.scv_accession, t.section, t.text

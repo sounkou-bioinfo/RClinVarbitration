@@ -42,11 +42,15 @@ bundles and selects exact-version artifacts for DuckDB `v1.5.0` through
 | `clinvar_normalized_alleles` | assembly/locus/ref/alt join view |
 | `clinvar_disease_aggregates` | VCV/allele × RCV × disease aggregate |
 | `clinvar_disease_submissions` | VCV/allele × SCV × disease submission |
+| `clinvar_policy_profiles` | named submitter-blinding profile |
+| `clinvar_policy_submitter_exclusions` | profile-specific submitter exclusion |
+| `clinvar_policy_decisions` | version/profile × allele × disease decision |
+| `clinvar_policy_pathogenic_alleles` | disease-specific P/LP normalized locus |
 
 The release-scale tables retain explicit logical key columns but do not create
 DuckDB ART indexes: those indexes must remain memory-resident and are a poor fit
-for a complete analytical release. The small `clinvar_releases` completion
-catalogue retains its primary key.
+for a complete analytical release. Only the small completion and policy-profile
+catalogues retain primary keys.
 
 The executable README requires the complete local
 `ClinVarVCVRelease_00-latest.xml.gz`, selected with
@@ -175,6 +179,65 @@ submission_summary <- dbGetQuery(con, "
 knitr::kable(submission_summary, row.names = FALSE)
 ```
 
+## Versioned decision policy
+
+The default policy is
+`cpg-clinvarbitration-2.2.11-disease-v1`, an attributed adaptation of Centre
+for Population Genomics ClinVarbitration 2.2.11. It preserves the upstream
+classification bins, 2016 ACMG threshold, 60/20 majority rule, review stars,
+and qualified Illumina benign exclusion, while grouping independently by
+allele and disease. Practice-guideline evidence precedes expert-panel evidence;
+disagreement within the highest available tier remains `Conflicting`.
+
+Unknown classifications do not vote. If any post-2015 or strong-review evidence
+exists for a disease/allele, ordinary older submissions are omitted. Additional
+blinding profiles are ordinary rows in `clinvar_policy_profiles` and
+`clinvar_policy_submitter_exclusions`; the selected profile is always retained
+in policy output.
+
+The executable example materializes the derived default decisions once in a
+temporary DuckDB table so the following summaries do not recompute policy.
+
+```{r policy-summary}
+invisible(dbExecute(con, "DROP TABLE IF EXISTS readme_policy_decisions"))
+invisible(dbExecute(con, "
+  CREATE TEMP TABLE readme_policy_decisions AS
+  SELECT * FROM clinvar_policy_decisions WHERE profile_id = 'default'
+"))
+policy_summary <- dbGetQuery(con, "
+  SELECT policy_classification, gold_stars,
+         count(*) AS disease_decisions,
+         sum(retained_submission_count) AS retained_submissions
+  FROM readme_policy_decisions
+  GROUP BY policy_classification, gold_stars
+  ORDER BY disease_decisions DESC
+")
+knitr::kable(policy_summary, row.names = FALSE)
+```
+
+`clinvar_policy_pathogenic_alleles` is the disease-specific P/LP join surface;
+it does not perform VEP or PM5.
+
+```{r policy-pathogenic-examples}
+pathogenic_examples <- dbGetQuery(con, "
+  SELECT p.vcv_accession, p.allele_id,
+         p.disease_database, p.disease_identifier, p.disease_name,
+         p.gold_stars, n.assembly, n.chromosome, n.position_vcf,
+         n.reference, n.alternate
+  FROM readme_policy_decisions p
+  JOIN clinvar_normalized_alleles n
+    ON n.release_id = p.release_id
+   AND n.vcv_accession = p.vcv_accession
+   AND n.allele_id = p.allele_id
+  WHERE p.policy_classification = 'Pathogenic/Likely Pathogenic'
+    AND n.assembly = 'GRCh38'
+    AND p.disease_identifier IS NOT NULL
+  ORDER BY p.vcv_accession, p.disease_key
+  LIMIT 12
+")
+knitr::kable(pathogenic_examples, row.names = FALSE)
+```
+
 ## Normalized allele join surface
 
 The normalized allele view is the join surface for downstream
@@ -220,13 +283,15 @@ if (!persistent_db) {
 }
 ```
 
-ClinVarbitration decision rules are a versioned SQL layer over
-`clinvar_disease_submissions`. P/LP outputs join
-`clinvar_normalized_alleles` by assembly, chromosome, position, reference, and
-alternate allele. DuckLake can later retain each merged release as a snapshot,
-but XML ingestion and policy semantics remain explicit here.
+DuckLake can later retain each merged release as a snapshot, but XML ingestion
+and policy semantics remain explicit here.
 
-## Acknowledgement
+## Acknowledgements
+
+The decision policy is adapted from
+[Centre for Population Genomics ClinVarbitration](https://github.com/populationgenomics/clinvarbitration),
+version 2.2.11 at commit
+`658b9f241eb2d43aa11214b153b19c1e18a16337`, under its MIT license.
 
 [Teague Sterling's DuckDB Webbed extension](https://github.com/teaguesterling/duckdb_webbed)
 informed the initial assessment of SQL-native XML ingestion. RClinVarbitration

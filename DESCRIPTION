@@ -6,7 +6,9 @@ Authors@R: c(
     person(given = "Sounkou Mahamane", family = "Toure",
            email = "sounkoutoure@gmail.com", role = c("aut", "cre")),
     person(given = "DuckDB Foundation", role = "cph",
-           comment = "Bundled DuckDB C extension headers")
+           comment = "Bundled DuckDB C extension headers"),
+    person(given = "Centre for Population Genomics", role = "cph",
+           comment = "ClinVarbitration 2.2.11 decision-policy semantics")
     )
 Description: Streams official 'ClinVar' VCV XML releases, including gzip
     inputs, into focused relational tables in 'DuckDB'. A package-owned native

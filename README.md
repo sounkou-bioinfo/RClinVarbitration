@@ -22,29 +22,33 @@ extensions.
 
 ## Relational schema
 
-| Relation                       | One row per                                                      |
-|:-------------------------------|:-----------------------------------------------------------------|
-| `clinvar_variants`             | VCV variation archive                                            |
-| `clinvar_alleles`              | allele or variation component                                    |
-| `clinvar_locations`            | assembly-specific allele location                                |
-| `clinvar_genes`                | allele–gene relation                                             |
-| `clinvar_rcv_assertions`       | disease-specific RCV aggregate assertion                         |
-| `clinvar_scv_assertions`       | submitted SCV assertion                                          |
-| `clinvar_conditions`           | condition attached to an RCV or SCV                              |
-| `clinvar_condition_names`      | preferred or alternate condition name                            |
-| `clinvar_observations`         | SCV observation                                                  |
-| `clinvar_citations`            | SCV-attributable citation                                        |
-| `clinvar_citation_identifiers` | PMID, DOI, or other citation identifier                          |
-| `clinvar_attributes`           | typed SCV source attribute retained with its context             |
-| `clinvar_text`                 | attributable assertion comment, condition name, or evidence text |
-| `clinvar_normalized_alleles`   | assembly/locus/ref/alt join view                                 |
-| `clinvar_disease_aggregates`   | VCV/allele × RCV × disease aggregate                             |
-| `clinvar_disease_submissions`  | VCV/allele × SCV × disease submission                            |
+| Relation                              | One row per                                                      |
+|:--------------------------------------|:-----------------------------------------------------------------|
+| `clinvar_variants`                    | VCV variation archive                                            |
+| `clinvar_alleles`                     | allele or variation component                                    |
+| `clinvar_locations`                   | assembly-specific allele location                                |
+| `clinvar_genes`                       | allele–gene relation                                             |
+| `clinvar_rcv_assertions`              | disease-specific RCV aggregate assertion                         |
+| `clinvar_scv_assertions`              | submitted SCV assertion                                          |
+| `clinvar_conditions`                  | condition attached to an RCV or SCV                              |
+| `clinvar_condition_names`             | preferred or alternate condition name                            |
+| `clinvar_observations`                | SCV observation                                                  |
+| `clinvar_citations`                   | SCV-attributable citation                                        |
+| `clinvar_citation_identifiers`        | PMID, DOI, or other citation identifier                          |
+| `clinvar_attributes`                  | typed SCV source attribute retained with its context             |
+| `clinvar_text`                        | attributable assertion comment, condition name, or evidence text |
+| `clinvar_normalized_alleles`          | assembly/locus/ref/alt join view                                 |
+| `clinvar_disease_aggregates`          | VCV/allele × RCV × disease aggregate                             |
+| `clinvar_disease_submissions`         | VCV/allele × SCV × disease submission                            |
+| `clinvar_policy_profiles`             | named submitter-blinding profile                                 |
+| `clinvar_policy_submitter_exclusions` | profile-specific submitter exclusion                             |
+| `clinvar_policy_decisions`            | version/profile × allele × disease decision                      |
+| `clinvar_policy_pathogenic_alleles`   | disease-specific P/LP normalized locus                           |
 
 The release-scale tables retain explicit logical key columns but do not
 create DuckDB ART indexes: those indexes must remain memory-resident and
-are a poor fit for a complete analytical release. The small
-`clinvar_releases` completion catalogue retains its primary key.
+are a poor fit for a complete analytical release. Only the small
+completion and policy-profile catalogues retain primary keys.
 
 The executable README requires the complete local
 `ClinVarVCVRelease_00-latest.xml.gz`, selected with
@@ -226,17 +230,17 @@ knitr::kable(submission_summary, row.names = FALSE)
 
 | classification         | review_status                       | disease_submissions | submitters |
 |:-----------------------|:------------------------------------|--------------------:|-----------:|
-| Uncertain significance | criteria provided, single submitter |             3272425 |        885 |
-| Likely benign          | criteria provided, single submitter |             1719238 |        323 |
-| Benign                 | criteria provided, single submitter |              592918 |        254 |
+| Uncertain significance | criteria provided, single submitter |             3272348 |        885 |
+| Likely benign          | criteria provided, single submitter |             1719233 |        323 |
+| Benign                 | criteria provided, single submitter |              592860 |        254 |
 | NA                     | no classification provided          |              531035 |         44 |
-| Pathogenic             | criteria provided, single submitter |              451560 |       1427 |
-| Likely pathogenic      | criteria provided, single submitter |              257591 |       1276 |
-| Uncertain significance | no assertion criteria provided      |              127780 |        697 |
-| Likely benign          | no assertion criteria provided      |              125192 |        208 |
-| Pathogenic             | no assertion criteria provided      |               83368 |       1430 |
-| Benign                 | no assertion criteria provided      |               57536 |        184 |
-| Likely pathogenic      | no assertion criteria provided      |               32892 |       1048 |
+| Pathogenic             | criteria provided, single submitter |              451361 |       1427 |
+| Likely pathogenic      | criteria provided, single submitter |              257503 |       1276 |
+| Uncertain significance | no assertion criteria provided      |              127713 |        697 |
+| Likely benign          | no assertion criteria provided      |              125113 |        208 |
+| Pathogenic             | no assertion criteria provided      |               82693 |       1430 |
+| Benign                 | no assertion criteria provided      |               57465 |        184 |
+| Likely pathogenic      | no assertion criteria provided      |               32859 |       1048 |
 | not provided           | no classification provided          |               30904 |        164 |
 | Uncertain Significance | criteria provided, single submitter |               29747 |         15 |
 | Likely Benign          | criteria provided, single submitter |               16871 |         12 |
@@ -246,6 +250,96 @@ knitr::kable(submission_summary, row.names = FALSE)
 | Benign                 | reviewed by expert panel            |                2778 |         41 |
 | Uncertain Significance | reviewed by expert panel            |                2699 |         39 |
 | pathogenic             | criteria provided, single submitter |                2518 |          9 |
+
+## Versioned decision policy
+
+The default policy is `cpg-clinvarbitration-2.2.11-disease-v1`, an
+attributed adaptation of Centre for Population Genomics ClinVarbitration
+2.2.11. It preserves the upstream classification bins, 2016 ACMG
+threshold, 60/20 majority rule, review stars, and qualified Illumina
+benign exclusion, while grouping independently by allele and disease.
+Practice-guideline evidence precedes expert-panel evidence; disagreement
+within the highest available tier remains `Conflicting`.
+
+Unknown classifications do not vote. If any post-2015 or strong-review
+evidence exists for a disease/allele, ordinary older submissions are
+omitted. Additional blinding profiles are ordinary rows in
+`clinvar_policy_profiles` and `clinvar_policy_submitter_exclusions`; the
+selected profile is always retained in policy output.
+
+The executable example materializes the derived default decisions once
+in a temporary DuckDB table so the following summaries do not recompute
+policy.
+
+``` r
+invisible(dbExecute(con, "DROP TABLE IF EXISTS readme_policy_decisions"))
+invisible(dbExecute(con, "
+  CREATE TEMP TABLE readme_policy_decisions AS
+  SELECT * FROM clinvar_policy_decisions WHERE profile_id = 'default'
+"))
+policy_summary <- dbGetQuery(con, "
+  SELECT policy_classification, gold_stars,
+         count(*) AS disease_decisions,
+         sum(retained_submission_count) AS retained_submissions
+  FROM readme_policy_decisions
+  GROUP BY policy_classification, gold_stars
+  ORDER BY disease_decisions DESC
+")
+knitr::kable(policy_summary, row.names = FALSE)
+```
+
+| policy_classification        | gold_stars | disease_decisions | retained_submissions |
+|:-----------------------------|-----------:|------------------:|---------------------:|
+| VUS                          |          0 |           3303372 |              3375612 |
+| Benign                       |          1 |           2143848 |              2269384 |
+| Pathogenic/Likely Pathogenic |          1 |            620791 |               717749 |
+| Benign                       |          0 |            137897 |               142802 |
+| Pathogenic/Likely Pathogenic |          0 |             92988 |                94313 |
+| Pathogenic/Likely Pathogenic |          3 |             12614 |                14960 |
+| Benign                       |          3 |              5546 |                 6673 |
+| VUS                          |          1 |              4898 |                15845 |
+| Conflicting                  |          1 |               326 |                  988 |
+| Pathogenic/Likely Pathogenic |          4 |                26 |                  269 |
+| Conflicting                  |          0 |                 5 |                   10 |
+| Benign                       |          4 |                 3 |                    3 |
+
+`clinvar_policy_pathogenic_alleles` is the disease-specific P/LP join
+surface; it does not perform VEP or PM5.
+
+``` r
+pathogenic_examples <- dbGetQuery(con, "
+  SELECT p.vcv_accession, p.allele_id,
+         p.disease_database, p.disease_identifier, p.disease_name,
+         p.gold_stars, n.assembly, n.chromosome, n.position_vcf,
+         n.reference, n.alternate
+  FROM readme_policy_decisions p
+  JOIN clinvar_normalized_alleles n
+    ON n.release_id = p.release_id
+   AND n.vcv_accession = p.vcv_accession
+   AND n.allele_id = p.allele_id
+  WHERE p.policy_classification = 'Pathogenic/Likely Pathogenic'
+    AND n.assembly = 'GRCh38'
+    AND p.disease_identifier IS NOT NULL
+  ORDER BY p.vcv_accession, p.disease_key
+  LIMIT 12
+")
+knitr::kable(pathogenic_examples, row.names = FALSE)
+```
+
+| vcv_accession | allele_id | disease_database | disease_identifier | disease_name                            | gold_stars | assembly | chromosome | position_vcf | reference | alternate              |
+|:--------------|----------:|:-----------------|:-------------------|:----------------------------------------|-----------:|:---------|:-----------|-------------:|:----------|:-----------------------|
+| VCV000000002  |     15041 | OMIM             | 613647             | NA                                      |          1 | GRCh38   | 7          |      4781213 | GGAT      | TGCTGTAAACTGTAACTGTAAA |
+| VCV000000005  |     15044 | MedGen           | C0023264           | Leigh syndrome                          |          1 | GRCh38   | 11         |    126275389 | C         | T                      |
+| VCV000000005  |     15044 | MedGen           | CN517202           | NA                                      |          1 | GRCh38   | 11         |    126275389 | C         | T                      |
+| VCV000000005  |     15044 | OMIM             | 618241             | NA                                      |          1 | GRCh38   | 11         |    126275389 | C         | T                      |
+| VCV000000006  |     15045 | OMIM             | 618241             | NA                                      |          1 | GRCh38   | 11         |    126277517 | A         | G                      |
+| VCV000000009  |     15048 | MedGen           | C0027672           | Hereditary cancer-predisposing syndrome |          1 | GRCh38   | 6          |     26092913 | G         | A                      |
+| VCV000000009  |     15048 | MedGen           | C0392514           | NA                                      |          1 | GRCh38   | 6          |     26092913 | G         | A                      |
+| VCV000000009  |     15048 | MedGen           | C0950123           | NA                                      |          1 | GRCh38   | 6          |     26092913 | G         | A                      |
+| VCV000000009  |     15048 | MedGen           | C3469186           | NA                                      |          1 | GRCh38   | 6          |     26092913 | G         | A                      |
+| VCV000000009  |     15048 | MedGen           | CN517202           | NA                                      |          1 | GRCh38   | 6          |     26092913 | G         | A                      |
+| VCV000000009  |     15048 | MONDO            | MONDO:0021001      | NA                                      |          1 | GRCh38   | 6          |     26092913 | G         | A                      |
+| VCV000000009  |     15048 | OMIM             | 104300             | NA                                      |          1 | GRCh38   | 6          |     26092913 | G         | A                      |
 
 ## Normalized allele join surface
 
@@ -291,8 +385,8 @@ knitr::kable(evidence, row.names = FALSE)
 
 | scv_accession | submitter_name | excerpt                                                                                                                                                                           |
 |:--------------|:---------------|:----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| SCV000020146  | OMIM           | Reason: Other                                                                                                                                                                     |
 | SCV000020146  | OMIM           | Notes: Flagging candidate with reason of insufficient supporting evidence. This gene has been classified as having a limited gene-disease relationship by a ClinGen Expert Panel. |
+| SCV000020146  | OMIM           | Reason: Other                                                                                                                                                                     |
 | SCV000020162  | OMIM           | Notes: None                                                                                                                                                                       |
 | SCV000020162  | OMIM           | Reason: Older and outlier claim with insufficient supporting evidence                                                                                                             |
 | SCV000020201  | OMIM           | Notes: None                                                                                                                                                                       |
@@ -311,14 +405,15 @@ if (!persistent_db) {
 }
 ```
 
-ClinVarbitration decision rules are a versioned SQL layer over
-`clinvar_disease_submissions`. P/LP outputs join
-`clinvar_normalized_alleles` by assembly, chromosome, position,
-reference, and alternate allele. DuckLake can later retain each merged
-release as a snapshot, but XML ingestion and policy semantics remain
-explicit here.
+DuckLake can later retain each merged release as a snapshot, but XML
+ingestion and policy semantics remain explicit here.
 
-## Acknowledgement
+## Acknowledgements
+
+The decision policy is adapted from [Centre for Population Genomics
+ClinVarbitration](https://github.com/populationgenomics/clinvarbitration),
+version 2.2.11 at commit `658b9f241eb2d43aa11214b153b19c1e18a16337`,
+under its MIT license.
 
 [Teague Sterling’s DuckDB Webbed
 extension](https://github.com/teaguesterling/duckdb_webbed) informed the

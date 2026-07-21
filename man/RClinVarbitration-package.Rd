@@ -31,6 +31,7 @@ Authors:
 Other contributors:
 \itemize{
   \item DuckDB Foundation (Bundled DuckDB C extension headers) [copyright holder]
+  \item Centre for Population Genomics (ClinVarbitration 2.2.11 decision-policy semantics) [copyright holder]
 }
 
 }
