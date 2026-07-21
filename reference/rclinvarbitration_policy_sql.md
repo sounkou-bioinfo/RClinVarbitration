@@ -1,4 +1,4 @@
-# Versioned disease-specific ClinVarbitration policy SQL
+# ClinVarbitration policy SQL
 
 Returns DuckDB views implementing the supported policy over
 `clinvar_disease_submissions`. The policy bins submitted
@@ -6,9 +6,10 @@ classifications, excludes unknown bins and the upstream qualified
 Illumina benign exclusion, optionally applies profile-specific submitter
 exclusions, prefers evidence evaluated from 2016 onward while always
 retaining expert-panel and practice guideline evidence, and applies the
-60/20 majority rule. Practice-guideline evidence takes precedence over
-expert-panel evidence; disagreement within the highest available review
-tier is reported as conflicting.
+60/20 majority rule. The disease-level and allele-level views both
+reproduce the upstream strong-review rule: the first retained
+practice-guideline or expert-panel classification in source order is
+decisive.
 
 ## Usage
 

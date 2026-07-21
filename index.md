@@ -1,5 +1,9 @@
 # RClinVarbitration
 
+[![R-CMD-check](https://github.com/sounkou-bioinfo/RClinVarbitration/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/sounkou-bioinfo/RClinVarbitration/actions/workflows/R-CMD-check.yaml)
+[![pkgdown](https://github.com/sounkou-bioinfo/RClinVarbitration/actions/workflows/pkgdown.yaml/badge.svg)](https://sounkou-bioinfo.github.io/RClinVarbitration/)
+[![r-universe](https://sounkou-bioinfo.r-universe.dev/badges/:name)](https://sounkou-bioinfo.r-universe.dev/)
+
 `RClinVarbitration` streams the complete official ClinVar VCV XML/XML.GZ
 release into focused relational DuckDB tables. It retains public VCV,
 RCV, SCV, AlleleID, VariationID, and disease identifiers instead of
@@ -39,8 +43,14 @@ extensions.
 | `clinvar_disease_submissions` | VCV/allele × SCV × disease submission |
 | `clinvar_policy_profiles` | named submitter-blinding profile |
 | `clinvar_policy_submitter_exclusions` | profile-specific submitter exclusion |
-| `clinvar_policy_decisions` | version/profile × allele × disease decision |
+| `clinvar_policy_decisions` | policy/profile × allele × disease decision |
+| `clinvar_policy_allele_decisions` | policy/profile × VCV/allele decision without disease grouping |
 | `clinvar_policy_pathogenic_alleles` | disease-specific P/LP normalized locus |
+
+`clinvar_locations` retains every source assembly location, including
+its VCF position, reference, and alternate alleles.
+`clinvar_normalized_alleles` exposes those normalized joins for GRCh37,
+GRCh38, and NCBI36; no GRCh37 coordinates are discarded.
 
 The release-scale tables retain explicit logical key columns but do not
 create DuckDB ART indexes: those indexes must remain memory-resident and
@@ -147,7 +157,8 @@ ClinVarbitration and for deriving alternative disease-aware policies.
 ``` r
 
 disease_summary <- dbGetQuery(con, "
-  SELECT aggregate_classification, aggregate_review_status,
+  SELECT coalesce(aggregate_classification, '<not classified>') AS aggregate_classification,
+         aggregate_review_status,
          count(*) AS disease_aggregates,
          count(DISTINCT disease_identifier) AS identified_diseases
   FROM clinvar_disease_aggregates
@@ -162,7 +173,7 @@ knitr::kable(disease_summary, row.names = FALSE)
 |:---|:---|---:|---:|
 | Uncertain significance | criteria provided, single submitter | 2994235 | 8562 |
 | Likely benign | criteria provided, single submitter | 1475769 | 5193 |
-| NA | no classification provided | 379911 | 81 |
+|  | no classification provided | 379911 | 81 |
 | Pathogenic | criteria provided, single submitter | 294922 | 7139 |
 | Benign | criteria provided, single submitter | 276571 | 5030 |
 | Likely pathogenic | criteria provided, single submitter | 197612 | 7527 |
@@ -185,7 +196,8 @@ knitr::kable(disease_summary, row.names = FALSE)
 
 disease_aggregates <- dbGetQuery(con, "
   SELECT vcv_accession, rcv_accession,
-         disease_database, disease_identifier, disease_name,
+         disease_database, disease_identifier,
+         coalesce(disease_name, '<not supplied by ClinVar>') AS disease_name,
          aggregate_classification, aggregate_review_status
   FROM clinvar_disease_aggregates
   WHERE disease_identifier IS NOT NULL
@@ -213,7 +225,11 @@ knitr::kable(disease_aggregates, row.names = FALSE)
 Individual SCVs retain their disease mappings, submitters, dates, review
 status, and contribution flags. Policy SQL can therefore recompute an
 aggregate per allele and disease instead of accepting only ClinVar’s
-top-line VCV label.
+top-line VCV label. Some source `ClinicalAssertion` records have the
+assertion type `variation to disease` and no germline classification;
+they remain queryable in `clinvar_scv_assertions` but cannot be policy
+votes, so the summary below excludes SQL-null classifications rather
+than rendering them as an ambiguous `NA`.
 
 ``` r
 
@@ -222,6 +238,7 @@ submission_summary <- dbGetQuery(con, "
          count(*) AS disease_submissions,
          count(DISTINCT submitter_id) AS submitters
   FROM clinvar_disease_submissions
+  WHERE classification IS NOT NULL
   GROUP BY classification, review_status
   ORDER BY disease_submissions DESC
   LIMIT 20
@@ -234,7 +251,6 @@ knitr::kable(submission_summary, row.names = FALSE)
 | Uncertain significance | criteria provided, single submitter | 3272348 | 885 |
 | Likely benign | criteria provided, single submitter | 1719233 | 323 |
 | Benign | criteria provided, single submitter | 592860 | 254 |
-| NA | no classification provided | 531035 | 44 |
 | Pathogenic | criteria provided, single submitter | 451361 | 1427 |
 | Likely pathogenic | criteria provided, single submitter | 257503 | 1276 |
 | Uncertain significance | no assertion criteria provided | 127713 | 697 |
@@ -251,16 +267,20 @@ knitr::kable(submission_summary, row.names = FALSE)
 | Benign | reviewed by expert panel | 2778 | 41 |
 | Uncertain Significance | reviewed by expert panel | 2699 | 39 |
 | pathogenic | criteria provided, single submitter | 2518 | 9 |
+| drug response | practice guideline | 2469 | 1 |
 
-## Versioned decision policy
+## ClinVarbitration decision policy
 
-The default policy is `cpg-clinvarbitration-2.2.11-disease-v1`, an
-attributed adaptation of Centre for Population Genomics ClinVarbitration
-2.2.11. It preserves the upstream classification bins, 2016 ACMG
-threshold, 60/20 majority rule, review stars, and qualified Illumina
-benign exclusion, while grouping independently by allele and disease.
-Practice-guideline evidence precedes expert-panel evidence; disagreement
-within the highest available tier remains `Conflicting`.
+The policy identifier is `cpg-clinvarbitration-2.2.11`, pinned to Centre
+for Population Genomics ClinVarbitration 2.2.11 at the attributed
+upstream commit. There is no package-local `v1` suffix: disease scoping
+is made explicit by the view name. The SQL follows the upstream
+classification bins, 2016 ACMG threshold, 60/20 majority rule,
+review-star calculation, qualified Illumina benign exclusion, and first
+retained practice-guideline or expert-panel submission in source order.
+`clinvar_policy_decisions` applies that logic per allele and disease;
+`clinvar_policy_allele_decisions` applies it per VCV/allele without
+disease grouping.
 
 Unknown classifications do not vote. If any post-2015 or strong-review
 evidence exists for a disease/allele, ordinary older submissions are
@@ -306,13 +326,15 @@ knitr::kable(policy_summary, row.names = FALSE)
 | Benign | 4 | 3 | 3 |
 
 `clinvar_policy_pathogenic_alleles` is the disease-specific P/LP join
-surface; it does not perform VEP or PM5.
+surface. It retains every source coordinate for a qualifying
+allele—including GRCh37 and GRCh38—and does not perform VEP or PM5.
 
 ``` r
 
 pathogenic_examples <- dbGetQuery(con, "
   SELECT p.vcv_accession, p.allele_id,
-         p.disease_database, p.disease_identifier, p.disease_name,
+         p.disease_database, p.disease_identifier,
+         coalesce(p.disease_name, '<not supplied by ClinVar>') AS disease_name,
          p.gold_stars, n.assembly, n.chromosome, n.position_vcf,
          n.reference, n.alternate
   FROM readme_policy_decisions p
@@ -321,7 +343,6 @@ pathogenic_examples <- dbGetQuery(con, "
    AND n.vcv_accession = p.vcv_accession
    AND n.allele_id = p.allele_id
   WHERE p.policy_classification = 'Pathogenic/Likely Pathogenic'
-    AND n.assembly = 'GRCh38'
     AND p.disease_identifier IS NOT NULL
   ORDER BY p.vcv_accession, p.disease_key
   LIMIT 12
@@ -331,18 +352,67 @@ knitr::kable(pathogenic_examples, row.names = FALSE)
 
 | vcv_accession | allele_id | disease_database | disease_identifier | disease_name | gold_stars | assembly | chromosome | position_vcf | reference | alternate |
 |:---|---:|:---|:---|:---|---:|:---|:---|---:|:---|:---|
-| VCV000000002 | 15041 | OMIM | 613647 | NA | 1 | GRCh38 | 7 | 4781213 | GGAT | TGCTGTAAACTGTAACTGTAAA |
+| VCV000000002 | 15041 | OMIM | 613647 |  | 1 | GRCh38 | 7 | 4781213 | GGAT | TGCTGTAAACTGTAACTGTAAA |
+| VCV000000002 | 15041 | OMIM | 613647 |  | 1 | GRCh37 | 7 | 4820844 | GGAT | TGCTGTAAACTGTAACTGTAAA |
 | VCV000000005 | 15044 | MedGen | C0023264 | Leigh syndrome | 1 | GRCh38 | 11 | 126275389 | C | T |
-| VCV000000005 | 15044 | MedGen | CN517202 | NA | 1 | GRCh38 | 11 | 126275389 | C | T |
-| VCV000000005 | 15044 | OMIM | 618241 | NA | 1 | GRCh38 | 11 | 126275389 | C | T |
-| VCV000000006 | 15045 | OMIM | 618241 | NA | 1 | GRCh38 | 11 | 126277517 | A | G |
+| VCV000000005 | 15044 | MedGen | C0023264 | Leigh syndrome | 1 | GRCh37 | 11 | 126145284 | C | T |
+| VCV000000005 | 15044 | MedGen | CN517202 |  | 1 | GRCh37 | 11 | 126145284 | C | T |
+| VCV000000005 | 15044 | MedGen | CN517202 |  | 1 | GRCh38 | 11 | 126275389 | C | T |
+| VCV000000005 | 15044 | OMIM | 618241 |  | 1 | GRCh38 | 11 | 126275389 | C | T |
+| VCV000000005 | 15044 | OMIM | 618241 |  | 1 | GRCh37 | 11 | 126145284 | C | T |
+| VCV000000006 | 15045 | OMIM | 618241 |  | 1 | GRCh38 | 11 | 126277517 | A | G |
+| VCV000000006 | 15045 | OMIM | 618241 |  | 1 | GRCh37 | 11 | 126147412 | A | G |
 | VCV000000009 | 15048 | MedGen | C0027672 | Hereditary cancer-predisposing syndrome | 1 | GRCh38 | 6 | 26092913 | G | A |
-| VCV000000009 | 15048 | MedGen | C0392514 | NA | 1 | GRCh38 | 6 | 26092913 | G | A |
-| VCV000000009 | 15048 | MedGen | C0950123 | NA | 1 | GRCh38 | 6 | 26092913 | G | A |
-| VCV000000009 | 15048 | MedGen | C3469186 | NA | 1 | GRCh38 | 6 | 26092913 | G | A |
-| VCV000000009 | 15048 | MedGen | CN517202 | NA | 1 | GRCh38 | 6 | 26092913 | G | A |
-| VCV000000009 | 15048 | MONDO | MONDO:0021001 | NA | 1 | GRCh38 | 6 | 26092913 | G | A |
-| VCV000000009 | 15048 | OMIM | 104300 | NA | 1 | GRCh38 | 6 | 26092913 | G | A |
+| VCV000000009 | 15048 | MedGen | C0027672 | Hereditary cancer-predisposing syndrome | 1 | GRCh37 | 6 | 26093141 | G | A |
+
+## Parquet decision outputs
+
+[`rclinvarbitration_export_clinvarbitration_parquet()`](https://sounkou-bioinfo.github.io/RClinVarbitration/reference/rclinvarbitration_export_clinvarbitration_parquet.md)
+writes the seven-column ClinVarbitration decision layout from the
+persisted VCV allele-policy view. It is an efficient VCV-derived
+annotation resource, but it does not collapse or overwrite distinct
+source loci for an AlleleID.
+
+``` r
+
+vcv_parquet <- tempfile("rclinvarbitration-vcv-policy-", fileext = ".parquet")
+vcv_parquet_info <- rclinvarbitration_export_clinvarbitration_parquet(
+  con, vcv_parquet, release_id = release_id, assembly = "GRCh38"
+)
+knitr::kable(
+  data.frame(rows = vcv_parquet_info$rows, assembly = vcv_parquet_info$assembly),
+  row.names = FALSE
+)
+```
+
+|    rows | assembly |
+|--------:|:---------|
+| 4176896 | GRCh38   |
+
+``` r
+
+unlink(vcv_parquet)
+```
+
+For an algorithm-level reproduction of the upstream artifact,
+[`rclinvarbitration_reproduce_clinvarbitration_parquet()`](https://sounkou-bioinfo.github.io/RClinVarbitration/reference/rclinvarbitration_reproduce_clinvarbitration_parquet.md)
+instead consumes the matching archived NCBI `submission_summary` and
+`variant_summary` files. It implements the upstream 2.2.11
+SQL-equivalent loop without Python, Hail, VEP, or PM5. It is
+deliberately separate from VCV disease policy because the upstream
+project itself uses those flat files.
+
+The archived March 5, 2026 flat files produce 4,125,389 GRCh38 rows.
+Against Centre for Population Genomics’ March 24, 2026 [Zenodo record
+19196770](https://zenodo.org/records/19196770), 4,118,490 locus/AlleleID
+keys are shared and 1,863 have a classification or star difference. The
+remaining 6,899 candidate-only and 16,865 reference-only keys
+demonstrate that the Zenodo run used a later live flat-file snapshot;
+this is a recorded differential baseline, not a claim of byte-for-byte
+identity across different inputs.
+`tools/compare_clinvarbitration_release.R` writes the candidate Parquet,
+non-equal differential Parquet, and this count summary from
+already-local archived files and a Zenodo TSV.
 
 ## Normalized allele join surface
 
@@ -390,10 +460,10 @@ knitr::kable(evidence, row.names = FALSE)
 
 | scv_accession | submitter_name | excerpt |
 |:---|:---|:---|
-| SCV000020146 | OMIM | Notes: Flagging candidate with reason of insufficient supporting evidence. This gene has been classified as having a limited gene-disease relationship by a ClinGen Expert Panel. |
 | SCV000020146 | OMIM | Reason: Other |
-| SCV000020162 | OMIM | Notes: None |
+| SCV000020146 | OMIM | Notes: Flagging candidate with reason of insufficient supporting evidence. This gene has been classified as having a limited gene-disease relationship by a ClinGen Expert Panel. |
 | SCV000020162 | OMIM | Reason: Older and outlier claim with insufficient supporting evidence |
+| SCV000020162 | OMIM | Notes: None |
 | SCV000020201 | OMIM | Notes: None |
 | SCV000020201 | OMIM | Reason: Outlier claim with insufficient supporting evidence |
 | SCV000020580 | OMIM | Until October, 2023, the haplotype reported in OMIM’s allelic variant 613018.0004 was erroneously represented in ClinVar as a simple allele. |

@@ -11,8 +11,8 @@
 <script src="deps/bootstrap-5.3.8/bootstrap.bundle.min.js"></script><link href="deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
 <link href="deps/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet">
 <script src="deps/headroom-0.11.0/headroom.min.js"></script><script src="deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="deps/search-1.0.0/fuse.min.js"></script><script src="deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="pkgdown.js"></script><meta property="og:title" content="Stream ClinVar XML into Relational DuckDB Tables">
-<meta name="description" content="Streams official ClinVar VCV XML releases, including gzip inputs, into focused relational tables in DuckDB. A package-owned native extension uses libxml2's forward reader to retain VCV variants, normalized alleles, RCV aggregates, SCV submissions, conditions, observations, citations, and attributable evidence text without loading the release into R. Versioned ClinVarbitration policy is a derived SQL layer over those retained source relations.">
-<meta property="og:description" content="Streams official ClinVar VCV XML releases, including gzip inputs, into focused relational tables in DuckDB. A package-owned native extension uses libxml2's forward reader to retain VCV variants, normalized alleles, RCV aggregates, SCV submissions, conditions, observations, citations, and attributable evidence text without loading the release into R. Versioned ClinVarbitration policy is a derived SQL layer over those retained source relations.">
+<meta name="description" content="Streams official ClinVar VCV XML releases, including gzip inputs, into focused relational tables in DuckDB. A package-owned native extension uses libxml2's forward reader to retain VCV variants, normalized alleles, RCV aggregates, SCV submissions, conditions, observations, citations, and attributable evidence text without loading the release into R. ClinVarbitration policy is a derived SQL layer over those retained source relations, with a separate direct reproducer for archived NCBI flat-file releases.">
+<meta property="og:description" content="Streams official ClinVar VCV XML releases, including gzip inputs, into focused relational tables in DuckDB. A package-owned native extension uses libxml2's forward reader to retain VCV variants, normalized alleles, RCV aggregates, SCV submissions, conditions, observations, citations, and attributable evidence text without loading the release into R. ClinVarbitration policy is a derived SQL layer over those retained source relations, with a separate direct reproducer for archived NCBI flat-file releases.">
 </head>
 <body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
@@ -49,6 +49,7 @@
   <main id="main" class="col-md-9"><div class="section level1">
 <div class="page-header"><h1 id="rclinvarbitration">RClinVarbitration<a class="anchor" aria-label="anchor" href="#rclinvarbitration"></a>
 </h1></div>
+<p><a href="https://github.com/sounkou-bioinfo/RClinVarbitration/actions/workflows/R-CMD-check.yaml" class="external-link"><img src="https://github.com/sounkou-bioinfo/RClinVarbitration/actions/workflows/R-CMD-check.yaml/badge.svg" alt="R-CMD-check"></a> <a href="https://sounkou-bioinfo.github.io/RClinVarbitration/"><img src="https://github.com/sounkou-bioinfo/RClinVarbitration/actions/workflows/pkgdown.yaml/badge.svg" alt="pkgdown"></a> <a href="https://sounkou-bioinfo.r-universe.dev/" class="external-link"><img src="https://sounkou-bioinfo.r-universe.dev/badges/:name" alt="r-universe"></a></p>
 <p><code>RClinVarbitration</code> streams the complete official ClinVar VCV XML/XML.GZ release into focused relational DuckDB tables. It retains public VCV, RCV, SCV, AlleleID, VariationID, and disease identifiers instead of exposing XML parser coordinates.</p>
 <p>The package-owned native extension uses a libxml2 forward reader. An import reads the gzip XML exactly once and writes one compact JSON-backed row per selected ClinVar entity to a disk-backed staging table. It then projects ordinary ClinVar relations without an EAV pivot and drops staging. It does not build an XML DOM or R data frame and does not persist generic XML nodes, edges, or element statements.</p>
 <p>Because the extension uses DuckDB’s <code>C_STRUCT_UNSTABLE</code> interface, the package bundles and selects exact-version artifacts for DuckDB <code>v1.5.0</code> through <code>v1.5.4</code>. Connections must allow locally built unsigned extensions.</p>
@@ -139,7 +140,11 @@
 </tr>
 <tr>
 <td align="left"><code>clinvar_policy_decisions</code></td>
-<td align="left">version/profile × allele × disease decision</td>
+<td align="left">policy/profile × allele × disease decision</td>
+</tr>
+<tr>
+<td align="left"><code>clinvar_policy_allele_decisions</code></td>
+<td align="left">policy/profile × VCV/allele decision without disease grouping</td>
 </tr>
 <tr>
 <td align="left"><code>clinvar_policy_pathogenic_alleles</code></td>
@@ -147,6 +152,7 @@
 </tr>
 </tbody>
 </table>
+<p><code>clinvar_locations</code> retains every source assembly location, including its VCF position, reference, and alternate alleles. <code>clinvar_normalized_alleles</code> exposes those normalized joins for GRCh37, GRCh38, and NCBI36; no GRCh37 coordinates are discarded.</p>
 <p>The release-scale tables retain explicit logical key columns but do not create DuckDB ART indexes: those indexes must remain memory-resident and are a poor fit for a complete analytical release. Only the small completion and policy-profile catalogues retain primary keys.</p>
 <p>The executable README requires the complete local <code>ClinVarVCVRelease_00-latest.xml.gz</code>, selected with <code>CLINVAR_VCV_XML_FILE</code>, and an explicit immutable release label in <code>CLINVAR_RELEASE_ID</code>. It does not substitute the bundled one-record regression fixture. A <strong>file-backed</strong> DuckDB holds the complete import so every following query reuses the same data rather than rescanning XML. Set <code>CLINVAR_DUCKDB_FILE</code> to retain and reuse a completed import across renders; otherwise the executable document uses a temporary database.</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
@@ -262,7 +268,8 @@
 <p>RCVs are the disease-specific ClinVar aggregates. They remain distinct from the VCV-level aggregate and are joined directly to their classified condition. This is the primary substrate for reproducing ClinVarbitration and for deriving alternative disease-aware policies.</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">disease_summary</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://dbi.r-dbi.org/reference/dbGetQuery.html" class="external-link">dbGetQuery</a></span><span class="op">(</span><span class="va">con</span>, <span class="st">"</span></span>
-<span><span class="st">  SELECT aggregate_classification, aggregate_review_status,</span></span>
+<span><span class="st">  SELECT coalesce(aggregate_classification, '&lt;not classified&gt;') AS aggregate_classification,</span></span>
+<span><span class="st">         aggregate_review_status,</span></span>
 <span><span class="st">         count(*) AS disease_aggregates,</span></span>
 <span><span class="st">         count(DISTINCT disease_identifier) AS identified_diseases</span></span>
 <span><span class="st">  FROM clinvar_disease_aggregates</span></span>
@@ -298,7 +305,7 @@
 <td align="right">5193</td>
 </tr>
 <tr>
-<td align="left">NA</td>
+<td align="left"><not classified></not></td>
 <td align="left">no classification provided</td>
 <td align="right">379911</td>
 <td align="right">81</td>
@@ -410,7 +417,8 @@
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">disease_aggregates</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://dbi.r-dbi.org/reference/dbGetQuery.html" class="external-link">dbGetQuery</a></span><span class="op">(</span><span class="va">con</span>, <span class="st">"</span></span>
 <span><span class="st">  SELECT vcv_accession, rcv_accession,</span></span>
-<span><span class="st">         disease_database, disease_identifier, disease_name,</span></span>
+<span><span class="st">         disease_database, disease_identifier,</span></span>
+<span><span class="st">         coalesce(disease_name, '&lt;not supplied by ClinVar&gt;') AS disease_name,</span></span>
 <span><span class="st">         aggregate_classification, aggregate_review_status</span></span>
 <span><span class="st">  FROM clinvar_disease_aggregates</span></span>
 <span><span class="st">  WHERE disease_identifier IS NOT NULL</span></span>
@@ -548,13 +556,14 @@
 </tr>
 </tbody>
 </table>
-<p>Individual SCVs retain their disease mappings, submitters, dates, review status, and contribution flags. Policy SQL can therefore recompute an aggregate per allele and disease instead of accepting only ClinVar’s top-line VCV label.</p>
+<p>Individual SCVs retain their disease mappings, submitters, dates, review status, and contribution flags. Policy SQL can therefore recompute an aggregate per allele and disease instead of accepting only ClinVar’s top-line VCV label. Some source <code>ClinicalAssertion</code> records have the assertion type <code>variation to disease</code> and no germline classification; they remain queryable in <code>clinvar_scv_assertions</code> but cannot be policy votes, so the summary below excludes SQL-null classifications rather than rendering them as an ambiguous <code>NA</code>.</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">submission_summary</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://dbi.r-dbi.org/reference/dbGetQuery.html" class="external-link">dbGetQuery</a></span><span class="op">(</span><span class="va">con</span>, <span class="st">"</span></span>
 <span><span class="st">  SELECT classification, review_status,</span></span>
 <span><span class="st">         count(*) AS disease_submissions,</span></span>
 <span><span class="st">         count(DISTINCT submitter_id) AS submitters</span></span>
 <span><span class="st">  FROM clinvar_disease_submissions</span></span>
+<span><span class="st">  WHERE classification IS NOT NULL</span></span>
 <span><span class="st">  GROUP BY classification, review_status</span></span>
 <span><span class="st">  ORDER BY disease_submissions DESC</span></span>
 <span><span class="st">  LIMIT 20</span></span>
@@ -591,12 +600,6 @@
 <td align="left">criteria provided, single submitter</td>
 <td align="right">592860</td>
 <td align="right">254</td>
-</tr>
-<tr>
-<td align="left">NA</td>
-<td align="left">no classification provided</td>
-<td align="right">531035</td>
-<td align="right">44</td>
 </tr>
 <tr>
 <td align="left">Pathogenic</td>
@@ -694,13 +697,19 @@
 <td align="right">2518</td>
 <td align="right">9</td>
 </tr>
+<tr>
+<td align="left">drug response</td>
+<td align="left">practice guideline</td>
+<td align="right">2469</td>
+<td align="right">1</td>
+</tr>
 </tbody>
 </table>
 </div>
 <div class="section level2">
-<h2 id="versioned-decision-policy">Versioned decision policy<a class="anchor" aria-label="anchor" href="#versioned-decision-policy"></a>
+<h2 id="clinvarbitration-decision-policy">ClinVarbitration decision policy<a class="anchor" aria-label="anchor" href="#clinvarbitration-decision-policy"></a>
 </h2>
-<p>The default policy is <code>cpg-clinvarbitration-2.2.11-disease-v1</code>, an attributed adaptation of Centre for Population Genomics ClinVarbitration 2.2.11. It preserves the upstream classification bins, 2016 ACMG threshold, 60/20 majority rule, review stars, and qualified Illumina benign exclusion, while grouping independently by allele and disease. Practice-guideline evidence precedes expert-panel evidence; disagreement within the highest available tier remains <code>Conflicting</code>.</p>
+<p>The policy identifier is <code>cpg-clinvarbitration-2.2.11</code>, pinned to Centre for Population Genomics ClinVarbitration 2.2.11 at the attributed upstream commit. There is no package-local <code>v1</code> suffix: disease scoping is made explicit by the view name. The SQL follows the upstream classification bins, 2016 ACMG threshold, 60/20 majority rule, review-star calculation, qualified Illumina benign exclusion, and first retained practice-guideline or expert-panel submission in source order. <code>clinvar_policy_decisions</code> applies that logic per allele and disease; <code>clinvar_policy_allele_decisions</code> applies it per VCV/allele without disease grouping.</p>
 <p>Unknown classifications do not vote. If any post-2015 or strong-review evidence exists for a disease/allele, ordinary older submissions are omitted. Additional blinding profiles are ordinary rows in <code>clinvar_policy_profiles</code> and <code>clinvar_policy_submitter_exclusions</code>; the selected profile is always retained in policy output.</p>
 <p>The executable example materializes the derived default decisions once in a temporary DuckDB table so the following summaries do not recompute policy.</p>
 <div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
@@ -806,11 +815,12 @@
 </tr>
 </tbody>
 </table>
-<p><code>clinvar_policy_pathogenic_alleles</code> is the disease-specific P/LP join surface; it does not perform VEP or PM5.</p>
+<p><code>clinvar_policy_pathogenic_alleles</code> is the disease-specific P/LP join surface. It retains every source coordinate for a qualifying allele—including GRCh37 and GRCh38—and does not perform VEP or PM5.</p>
 <div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">pathogenic_examples</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://dbi.r-dbi.org/reference/dbGetQuery.html" class="external-link">dbGetQuery</a></span><span class="op">(</span><span class="va">con</span>, <span class="st">"</span></span>
 <span><span class="st">  SELECT p.vcv_accession, p.allele_id,</span></span>
-<span><span class="st">         p.disease_database, p.disease_identifier, p.disease_name,</span></span>
+<span><span class="st">         p.disease_database, p.disease_identifier,</span></span>
+<span><span class="st">         coalesce(p.disease_name, '&lt;not supplied by ClinVar&gt;') AS disease_name,</span></span>
 <span><span class="st">         p.gold_stars, n.assembly, n.chromosome, n.position_vcf,</span></span>
 <span><span class="st">         n.reference, n.alternate</span></span>
 <span><span class="st">  FROM readme_policy_decisions p</span></span>
@@ -819,7 +829,6 @@
 <span><span class="st">   AND n.vcv_accession = p.vcv_accession</span></span>
 <span><span class="st">   AND n.allele_id = p.allele_id</span></span>
 <span><span class="st">  WHERE p.policy_classification = 'Pathogenic/Likely Pathogenic'</span></span>
-<span><span class="st">    AND n.assembly = 'GRCh38'</span></span>
 <span><span class="st">    AND p.disease_identifier IS NOT NULL</span></span>
 <span><span class="st">  ORDER BY p.vcv_accession, p.disease_key</span></span>
 <span><span class="st">  LIMIT 12</span></span>
@@ -858,11 +867,24 @@
 <td align="right">15041</td>
 <td align="left">OMIM</td>
 <td align="left">613647</td>
-<td align="left">NA</td>
+<td align="left"><not supplied by clinvar></not></td>
 <td align="right">1</td>
 <td align="left">GRCh38</td>
 <td align="left">7</td>
 <td align="right">4781213</td>
+<td align="left">GGAT</td>
+<td align="left">TGCTGTAAACTGTAACTGTAAA</td>
+</tr>
+<tr>
+<td align="left">VCV000000002</td>
+<td align="right">15041</td>
+<td align="left">OMIM</td>
+<td align="left">613647</td>
+<td align="left"><not supplied by clinvar></not></td>
+<td align="right">1</td>
+<td align="left">GRCh37</td>
+<td align="left">7</td>
+<td align="right">4820844</td>
 <td align="left">GGAT</td>
 <td align="left">TGCTGTAAACTGTAACTGTAAA</td>
 </tr>
@@ -883,8 +905,34 @@
 <td align="left">VCV000000005</td>
 <td align="right">15044</td>
 <td align="left">MedGen</td>
+<td align="left">C0023264</td>
+<td align="left">Leigh syndrome</td>
+<td align="right">1</td>
+<td align="left">GRCh37</td>
+<td align="left">11</td>
+<td align="right">126145284</td>
+<td align="left">C</td>
+<td align="left">T</td>
+</tr>
+<tr>
+<td align="left">VCV000000005</td>
+<td align="right">15044</td>
+<td align="left">MedGen</td>
 <td align="left">CN517202</td>
-<td align="left">NA</td>
+<td align="left"><not supplied by clinvar></not></td>
+<td align="right">1</td>
+<td align="left">GRCh37</td>
+<td align="left">11</td>
+<td align="right">126145284</td>
+<td align="left">C</td>
+<td align="left">T</td>
+</tr>
+<tr>
+<td align="left">VCV000000005</td>
+<td align="right">15044</td>
+<td align="left">MedGen</td>
+<td align="left">CN517202</td>
+<td align="left"><not supplied by clinvar></not></td>
 <td align="right">1</td>
 <td align="left">GRCh38</td>
 <td align="left">11</td>
@@ -897,7 +945,7 @@
 <td align="right">15044</td>
 <td align="left">OMIM</td>
 <td align="left">618241</td>
-<td align="left">NA</td>
+<td align="left"><not supplied by clinvar></not></td>
 <td align="right">1</td>
 <td align="left">GRCh38</td>
 <td align="left">11</td>
@@ -906,15 +954,41 @@
 <td align="left">T</td>
 </tr>
 <tr>
+<td align="left">VCV000000005</td>
+<td align="right">15044</td>
+<td align="left">OMIM</td>
+<td align="left">618241</td>
+<td align="left"><not supplied by clinvar></not></td>
+<td align="right">1</td>
+<td align="left">GRCh37</td>
+<td align="left">11</td>
+<td align="right">126145284</td>
+<td align="left">C</td>
+<td align="left">T</td>
+</tr>
+<tr>
 <td align="left">VCV000000006</td>
 <td align="right">15045</td>
 <td align="left">OMIM</td>
 <td align="left">618241</td>
-<td align="left">NA</td>
+<td align="left"><not supplied by clinvar></not></td>
 <td align="right">1</td>
 <td align="left">GRCh38</td>
 <td align="left">11</td>
 <td align="right">126277517</td>
+<td align="left">A</td>
+<td align="left">G</td>
+</tr>
+<tr>
+<td align="left">VCV000000006</td>
+<td align="right">15045</td>
+<td align="left">OMIM</td>
+<td align="left">618241</td>
+<td align="left"><not supplied by clinvar></not></td>
+<td align="right">1</td>
+<td align="left">GRCh37</td>
+<td align="left">11</td>
+<td align="right">126147412</td>
 <td align="left">A</td>
 <td align="left">G</td>
 </tr>
@@ -935,77 +1009,12 @@
 <td align="left">VCV000000009</td>
 <td align="right">15048</td>
 <td align="left">MedGen</td>
-<td align="left">C0392514</td>
-<td align="left">NA</td>
+<td align="left">C0027672</td>
+<td align="left">Hereditary cancer-predisposing syndrome</td>
 <td align="right">1</td>
-<td align="left">GRCh38</td>
+<td align="left">GRCh37</td>
 <td align="left">6</td>
-<td align="right">26092913</td>
-<td align="left">G</td>
-<td align="left">A</td>
-</tr>
-<tr>
-<td align="left">VCV000000009</td>
-<td align="right">15048</td>
-<td align="left">MedGen</td>
-<td align="left">C0950123</td>
-<td align="left">NA</td>
-<td align="right">1</td>
-<td align="left">GRCh38</td>
-<td align="left">6</td>
-<td align="right">26092913</td>
-<td align="left">G</td>
-<td align="left">A</td>
-</tr>
-<tr>
-<td align="left">VCV000000009</td>
-<td align="right">15048</td>
-<td align="left">MedGen</td>
-<td align="left">C3469186</td>
-<td align="left">NA</td>
-<td align="right">1</td>
-<td align="left">GRCh38</td>
-<td align="left">6</td>
-<td align="right">26092913</td>
-<td align="left">G</td>
-<td align="left">A</td>
-</tr>
-<tr>
-<td align="left">VCV000000009</td>
-<td align="right">15048</td>
-<td align="left">MedGen</td>
-<td align="left">CN517202</td>
-<td align="left">NA</td>
-<td align="right">1</td>
-<td align="left">GRCh38</td>
-<td align="left">6</td>
-<td align="right">26092913</td>
-<td align="left">G</td>
-<td align="left">A</td>
-</tr>
-<tr>
-<td align="left">VCV000000009</td>
-<td align="right">15048</td>
-<td align="left">MONDO</td>
-<td align="left">MONDO:0021001</td>
-<td align="left">NA</td>
-<td align="right">1</td>
-<td align="left">GRCh38</td>
-<td align="left">6</td>
-<td align="right">26092913</td>
-<td align="left">G</td>
-<td align="left">A</td>
-</tr>
-<tr>
-<td align="left">VCV000000009</td>
-<td align="right">15048</td>
-<td align="left">OMIM</td>
-<td align="left">104300</td>
-<td align="left">NA</td>
-<td align="right">1</td>
-<td align="left">GRCh38</td>
-<td align="left">6</td>
-<td align="right">26092913</td>
+<td align="right">26093141</td>
 <td align="left">G</td>
 <td align="left">A</td>
 </tr>
@@ -1013,10 +1022,38 @@
 </table>
 </div>
 <div class="section level2">
+<h2 id="parquet-decision-outputs">Parquet decision outputs<a class="anchor" aria-label="anchor" href="#parquet-decision-outputs"></a>
+</h2>
+<p><code><a href="reference/rclinvarbitration_export_clinvarbitration_parquet.html">rclinvarbitration_export_clinvarbitration_parquet()</a></code> writes the seven-column ClinVarbitration decision layout from the persisted VCV allele-policy view. It is an efficient VCV-derived annotation resource, but it does not collapse or overwrite distinct source loci for an AlleleID.</p>
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">vcv_parquet</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempfile</a></span><span class="op">(</span><span class="st">"rclinvarbitration-vcv-policy-"</span>, fileext <span class="op">=</span> <span class="st">".parquet"</span><span class="op">)</span></span>
+<span><span class="va">vcv_parquet_info</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/rclinvarbitration_export_clinvarbitration_parquet.html">rclinvarbitration_export_clinvarbitration_parquet</a></span><span class="op">(</span></span>
+<span>  <span class="va">con</span>, <span class="va">vcv_parquet</span>, release_id <span class="op">=</span> <span class="va">release_id</span>, assembly <span class="op">=</span> <span class="st">"GRCh38"</span></span>
+<span><span class="op">)</span></span>
+<span><span class="fu">knitr</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/knitr/man/kable.html" class="external-link">kable</a></span><span class="op">(</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>rows <span class="op">=</span> <span class="va">vcv_parquet_info</span><span class="op">$</span><span class="va">rows</span>, assembly <span class="op">=</span> <span class="va">vcv_parquet_info</span><span class="op">$</span><span class="va">assembly</span><span class="op">)</span>,</span>
+<span>  row.names <span class="op">=</span> <span class="cn">FALSE</span></span>
+<span><span class="op">)</span></span></code></pre></div>
+<table class="table">
+<thead><tr>
+<th align="right">rows</th>
+<th align="left">assembly</th>
+</tr></thead>
+<tbody><tr>
+<td align="right">4176896</td>
+<td align="left">GRCh38</td>
+</tr></tbody>
+</table>
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/unlink.html" class="external-link">unlink</a></span><span class="op">(</span><span class="va">vcv_parquet</span><span class="op">)</span></span></code></pre></div>
+<p>For an algorithm-level reproduction of the upstream artifact, <code><a href="reference/rclinvarbitration_reproduce_clinvarbitration_parquet.html">rclinvarbitration_reproduce_clinvarbitration_parquet()</a></code> instead consumes the matching archived NCBI <code>submission_summary</code> and <code>variant_summary</code> files. It implements the upstream 2.2.11 SQL-equivalent loop without Python, Hail, VEP, or PM5. It is deliberately separate from VCV disease policy because the upstream project itself uses those flat files.</p>
+<p>The archived March 5, 2026 flat files produce 4,125,389 GRCh38 rows. Against Centre for Population Genomics’ March 24, 2026 <a href="https://zenodo.org/records/19196770" class="external-link">Zenodo record 19196770</a>, 4,118,490 locus/AlleleID keys are shared and 1,863 have a classification or star difference. The remaining 6,899 candidate-only and 16,865 reference-only keys demonstrate that the Zenodo run used a later live flat-file snapshot; this is a recorded differential baseline, not a claim of byte-for-byte identity across different inputs. <code>tools/compare_clinvarbitration_release.R</code> writes the candidate Parquet, non-equal differential Parquet, and this count summary from already-local archived files and a Zenodo TSV.</p>
+</div>
+<div class="section level2">
 <h2 id="normalized-allele-join-surface">Normalized allele join surface<a class="anchor" aria-label="anchor" href="#normalized-allele-join-surface"></a>
 </h2>
 <p>The normalized allele view is the join surface for downstream Rduckhts/DuckHTS work. RClinVarbitration does not duplicate VEP or PM5.</p>
-<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">alleles</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://dbi.r-dbi.org/reference/dbGetQuery.html" class="external-link">dbGetQuery</a></span><span class="op">(</span><span class="va">con</span>, <span class="st">"</span></span>
 <span><span class="st">  SELECT assembly,</span></span>
 <span><span class="st">         count(*) AS normalized_alleles,</span></span>
@@ -1051,7 +1088,7 @@
 </tbody>
 </table>
 <p>Long assertion explanations remain attributable to the source SCV. The README truncates selected text in SQL so knitr does not pad console output to the width of the longest ClinVar comment.</p>
-<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">evidence</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://dbi.r-dbi.org/reference/dbGetQuery.html" class="external-link">dbGetQuery</a></span><span class="op">(</span><span class="va">con</span>, <span class="st">"</span></span>
 <span><span class="st">  SELECT s.scv_accession, s.submitter_name,</span></span>
 <span><span class="st">         left(t.text, 180) || CASE WHEN length(t.text) &gt; 180 THEN '…' ELSE '' END AS excerpt</span></span>
@@ -1079,22 +1116,22 @@
 <tr>
 <td align="left">SCV000020146</td>
 <td align="left">OMIM</td>
-<td align="left">Notes: Flagging candidate with reason of insufficient supporting evidence. This gene has been classified as having a limited gene-disease relationship by a ClinGen Expert Panel.</td>
+<td align="left">Reason: Other</td>
 </tr>
 <tr>
 <td align="left">SCV000020146</td>
 <td align="left">OMIM</td>
-<td align="left">Reason: Other</td>
-</tr>
-<tr>
-<td align="left">SCV000020162</td>
-<td align="left">OMIM</td>
-<td align="left">Notes: None</td>
+<td align="left">Notes: Flagging candidate with reason of insufficient supporting evidence. This gene has been classified as having a limited gene-disease relationship by a ClinGen Expert Panel.</td>
 </tr>
 <tr>
 <td align="left">SCV000020162</td>
 <td align="left">OMIM</td>
 <td align="left">Reason: Older and outlier claim with insufficient supporting evidence</td>
+</tr>
+<tr>
+<td align="left">SCV000020162</td>
+<td align="left">OMIM</td>
+<td align="left">Notes: None</td>
 </tr>
 <tr>
 <td align="left">SCV000020201</td>
@@ -1118,7 +1155,7 @@
 </tr>
 </tbody>
 </table>
-<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu">DBI</span><span class="fu">::</span><span class="fu"><a href="https://dbi.r-dbi.org/reference/dbDisconnect.html" class="external-link">dbDisconnect</a></span><span class="op">(</span><span class="va">con</span>, shutdown <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
 <span><span class="kw">if</span> <span class="op">(</span><span class="op">!</span><span class="va">persistent_db</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="fu"><a href="https://rdrr.io/r/base/unlink.html" class="external-link">unlink</a></span><span class="op">(</span></span>

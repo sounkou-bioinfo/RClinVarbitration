@@ -13,6 +13,8 @@ Useful links:
 
 - <https://github.com/sounkou-bioinfo/RClinVarbitration>
 
+- <https://sounkou-bioinfo.github.io/RClinVarbitration/>
+
 - Report bugs at
   <https://github.com/sounkou-bioinfo/RClinVarbitration/issues>
 

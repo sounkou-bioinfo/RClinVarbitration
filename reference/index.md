@@ -11,6 +11,14 @@
 - [`rclinvarbitration_import_xml()`](https://sounkou-bioinfo.github.io/RClinVarbitration/reference/rclinvarbitration_import_xml.md)
   : Stream a ClinVar VCV XML release into relational DuckDB tables
 
+## Parquet outputs
+
+- [`rclinvarbitration_export_clinvarbitration_parquet()`](https://sounkou-bioinfo.github.io/RClinVarbitration/reference/rclinvarbitration_export_clinvarbitration_parquet.md)
+  : Export an allele-level ClinVarbitration-compatible Parquet file
+- [`rclinvarbitration_reproduce_clinvarbitration_parquet()`](https://sounkou-bioinfo.github.io/RClinVarbitration/reference/rclinvarbitration_reproduce_clinvarbitration_parquet.md)
+  : Reproduce ClinVarbitration decisions from archived ClinVar flat
+  files
+
 ## Schema and policy
 
 - [`rclinvarbitration_schema_sql()`](https://sounkou-bioinfo.github.io/RClinVarbitration/reference/rclinvarbitration_schema_sql.md)
@@ -18,4 +26,4 @@
 - [`rclinvarbitration_policy_version()`](https://sounkou-bioinfo.github.io/RClinVarbitration/reference/rclinvarbitration_policy_version.md)
   : Current ClinVarbitration policy version
 - [`rclinvarbitration_policy_sql()`](https://sounkou-bioinfo.github.io/RClinVarbitration/reference/rclinvarbitration_policy_sql.md)
-  : Versioned disease-specific ClinVarbitration policy SQL
+  : ClinVarbitration policy SQL

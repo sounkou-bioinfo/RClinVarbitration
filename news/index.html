@@ -34,10 +34,13 @@
 
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.1.1" id="rclinvarbitration-011">RClinVarbitration 0.1.1<a class="anchor" aria-label="anchor" href="#rclinvarbitration-011"></a></h2>
-<ul><li>Bundle exact <code>C_STRUCT_UNSTABLE</code> extension artifacts for DuckDB <code>v1.5.0</code> through <code>v1.5.4</code>, selected from the enabled connection’s engine version.</li>
+<ul><li>Remove the premature local <code>v1</code> policy suffix; preserve the pinned <code>cpg-clinvarbitration-2.2.11</code> identifier, source-order strong-review rule, and separate disease- and allele-level decision views.</li>
+<li>Add Parquet exporters for the VCV-derived allele policy and for direct, SQL-only reproduction of ClinVarbitration from versioned NCBI flat-file archives, plus a retained differential script for published Zenodo releases.</li>
+<li>Retain imported SCV source order for deterministic strong-review decisions.</li>
+<li>Bundle exact <code>C_STRUCT_UNSTABLE</code> extension artifacts for DuckDB <code>v1.5.0</code> through <code>v1.5.4</code>, selected from the enabled connection’s engine version.</li>
 <li>Replace generic XML node/edge/statement persistence with a one-pass, ClinVar-specific entity scan and focused VCV, allele, location, gene, RCV, SCV, condition, observation, citation, attribute, and evidence-text relations. Staging now stores one JSON-backed row per selected entity and requires no release-wide EAV grouping. Release-scale tables use logical keys without memory-resident ART indexes, and each projection commits separately; the release catalogue marks completion and failed imports clean partial rows.</li>
 <li>Add <code>clinvar_disease_aggregates</code> and <code>clinvar_disease_submissions</code> as direct RCV- and SCV-level disease-policy inputs, with canonical disease identifiers selected independently of the complete retained cross-reference relation.</li>
-<li>Add the versioned <code>cpg-clinvarbitration-2.2.11-disease-v1</code> SQL policy, configurable submitter-blinding profiles, and <code>clinvar_policy_pathogenic_alleles</code> as the disease-specific P/LP join surface for Rduckhts/DuckHTS.</li>
+<li>Add the <code>cpg-clinvarbitration-2.2.11</code> SQL policy, configurable submitter-blinding profiles, and <code>clinvar_policy_pathogenic_alleles</code> as the disease-specific P/LP join surface for Rduckhts/DuckHTS.</li>
 <li>Require README execution against the complete official VCV XML.GZ in one file-backed import; all displayed summaries query that persisted import and never rescan XML.</li>
 </ul></div>
     <div class="section level2">
