@@ -229,6 +229,29 @@ that contract is implemented and tested, use these relations as an explicit
 integration design, not a claim that ClinVar evidence is automatically mapped
 to SVC criteria.
 
+### Talos 11.1 compatibility target
+
+Talos commit
+[`dc0278df0c0af80614963444f3766e22e8124c27`](https://github.com/populationgenomics/talos/commit/dc0278df0c0af80614963444f3766e22e8124c27)
+(version 11.1.0) is a useful new pinned oracle. It removes Talos's private
+BCFtools fork because the required greedy coding/non-coding behavior is in
+upstream BCFtools 1.24, and invokes `bcftools csq --greedy 1 --local-csq`. It
+also introduces STRipy-derived short-tandem-repeat records as a separate Talos
+variant type.
+
+That sharpens two integration boundaries:
+
+- DuckHTS/VariantStory compatibility should target official BCFtools 1.24 with
+  the exact `--greedy 1 --local-csq` profile, not an unspecified BCFtools result
+  or the former private fork.
+- STR evidence needs its own callset identity, repeat-count and disease-range
+  semantics, inheritance logic, and evaluation profile. ClinVar gene/HPO/text
+  relations can support retrieval for an STR locus, but an allele-level
+  ClinVarbitration label must not be silently applied to a repeat expansion.
+
+RClinVarbitration still supplies release-pinned ClinVar source observations;
+it does not own BCFtools consequence projection or STR genotype interpretation.
+
 For VUS and novel-variant workflows, the safe sequence is:
 
 ```text
