@@ -2,7 +2,7 @@
 % Please edit documentation in R/policy.R
 \name{rclinvarbitration_policy_sql}
 \alias{rclinvarbitration_policy_sql}
-\title{Versioned disease-specific ClinVarbitration policy SQL}
+\title{ClinVarbitration policy SQL}
 \usage{
 rclinvarbitration_policy_sql(
   policy_version = rclinvarbitration_policy_version()
@@ -22,9 +22,10 @@ Returns DuckDB views implementing the supported policy over
 excludes unknown bins and the upstream qualified Illumina benign exclusion,
 optionally applies profile-specific submitter exclusions, prefers evidence
 evaluated from 2016 onward while always retaining expert-panel and practice
-guideline evidence, and applies the 60/20 majority rule. Practice-guideline
-evidence takes precedence over expert-panel evidence; disagreement within
-the highest available review tier is reported as conflicting.
+guideline evidence, and applies the 60/20 majority rule. The disease-level
+and allele-level views both reproduce the upstream strong-review rule: the
+first retained practice-guideline or expert-panel classification in source
+order is decisive.
 }
 \details{
 \code{clinvar_policy_pathogenic_alleles} is the disease-specific pathogenic or

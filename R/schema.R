@@ -59,7 +59,7 @@ rclinvarbitration_schema_sql <- function() {
     ),
     scvs = paste(
       "CREATE TABLE IF NOT EXISTS clinvar_scv_assertions (",
-      "release_id TEXT NOT NULL, record_ordinal UBIGINT NOT NULL,",
+      "release_id TEXT NOT NULL, record_ordinal UBIGINT NOT NULL, source_ordinal UBIGINT,",
       "vcv_accession TEXT NOT NULL, assertion_entity_id TEXT NOT NULL, assertion_id UBIGINT,",
       "scv_accession TEXT, scv_version UINTEGER, submitter_name TEXT, submitter_id UBIGINT,",
       "organization_category TEXT, organization_abbreviation TEXT, local_key TEXT,",
@@ -68,6 +68,7 @@ rclinvarbitration_schema_sql <- function() {
       "submission_date DATE, date_created DATE, date_last_updated DATE,",
       "contributes_to_aggregate_classification BOOLEAN)"
     ),
+    scv_source_ordinal = "ALTER TABLE clinvar_scv_assertions ADD COLUMN IF NOT EXISTS source_ordinal UBIGINT",
     conditions = paste(
       "CREATE TABLE IF NOT EXISTS clinvar_conditions (",
       "release_id TEXT NOT NULL, record_ordinal UBIGINT NOT NULL,",
@@ -185,7 +186,7 @@ rclinvarbitration_schema_sql <- function() {
       "WHEN 'omim' THEN 2 WHEN 'orphanet' THEN 3 WHEN 'mesh' THEN 4",
       "WHEN 'umls' THEN 5 ELSE 6 END, database_name, database_id, xref_id) = 1),",
       "linked AS (SELECT s.release_id, s.vcv_accession, v.variation_id, a.allele_id,",
-      "s.assertion_entity_id, s.scv_accession, s.scv_version, s.assertion_id,",
+      "s.assertion_entity_id, s.scv_accession, s.scv_version, s.assertion_id, s.source_ordinal,",
       "s.submitter_name, s.submitter_id, s.classification, s.review_status,",
       "s.date_last_evaluated, s.submission_date, s.contributes_to_aggregate_classification,",
       "c.condition_id, c.trait_set_id,",
@@ -290,7 +291,7 @@ rclinvarbitration_import_statements <- function(release_sql) {
     scvs = rclinvarbitration_entity_insert_sql(
       "clinvar_scv_assertions", "scv_assertion",
       paste0(
-        "SELECT ", release_sql, ", record_ordinal, vcv_accession, entity_id,",
+        "SELECT ", release_sql, ", record_ordinal, entity_ordinal, vcv_accession, entity_id,",
         "try_cast(", field("id"), " AS UBIGINT),", field("scv_accession"), ",",
         "try_cast(", field("scv_version"), " AS UINTEGER),", field("submitter_name"), ",",
         "try_cast(", field("submitter_id"), " AS UBIGINT),", field("organization_category"), ",",

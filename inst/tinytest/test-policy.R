@@ -1,6 +1,6 @@
 expect_equal(
   rclinvarbitration_policy_version(),
-  "cpg-clinvarbitration-2.2.11-disease-v1"
+  "cpg-clinvarbitration-2.2.11"
 )
 expect_error(rclinvarbitration_policy_sql("unknown"), "Unsupported")
 
@@ -71,13 +71,16 @@ add_submission("K", "drug response")
 add_submission("L", "Pathogenic, low penetrance")
 add_submission("M", "Pathogenic", submitter = "blind-me")
 add_submission("M", "Benign", submitter = "independent-lab")
+add_submission("N", "Benign", "reviewed by expert panel")
+add_submission("N", "Pathogenic", "practice guideline")
 
 DBI::dbExecute(con, paste0(
   "CREATE VIEW clinvar_disease_submissions AS SELECT ",
   "col0 AS release_id, col1 AS vcv_accession, cast(col2 AS UBIGINT) AS variation_id, ",
   "cast(col3 AS UBIGINT) AS allele_id, col4 AS assertion_entity_id, col5 AS scv_accession, ",
   "cast(col6 AS UINTEGER) AS scv_version, cast(col7 AS UBIGINT) AS assertion_id, ",
-  "col8 AS submitter_name, col9 AS classification, col10 AS review_status, ",
+  "cast(col7 AS UBIGINT) AS source_ordinal, col8 AS submitter_name, ",
+  "col9 AS classification, col10 AS review_status, ",
   "cast(col11 AS DATE) AS date_last_evaluated, col12 AS condition_id, ",
   "col13 AS disease_database, col14 AS disease_identifier, col15 AS disease_name, ",
   "col16 AS disease_key FROM (VALUES ", paste(rows, collapse = ","), ")"
@@ -102,17 +105,17 @@ default <- DBI::dbGetQuery(con, "
   WHERE profile_id = 'default'
   ORDER BY group_id
 ")
-expect_equal(default$group_id, c(LETTERS[1:10], "L", "M"))
+expect_equal(default$group_id, c(LETTERS[1:10], "L", "M", "N"))
 expect_equal(
   default$policy_classification,
   c(
     "Benign", "Pathogenic/Likely Pathogenic", "Conflicting", "VUS",
     "Pathogenic/Likely Pathogenic", "Benign", "Benign",
     "Pathogenic/Likely Pathogenic", "Pathogenic/Likely Pathogenic",
-    "Pathogenic/Likely Pathogenic", "Pathogenic/Likely Pathogenic", "Conflicting"
+    "Pathogenic/Likely Pathogenic", "Pathogenic/Likely Pathogenic", "Conflicting", "Benign"
   )
 )
-expect_equal(default$gold_stars[c(1L, 9L)], c(3L, 4L))
+expect_equal(default$gold_stars[c(1L, 9L, 13L)], c(3L, 4L, 4L))
 expect_true(default$modern_filter_applied[7L])
 expect_false(default$modern_filter_applied[8L])
 expect_equal(default$eligible_submission_count[7L], 2)

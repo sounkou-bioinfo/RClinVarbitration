@@ -125,6 +125,68 @@ expect_equal(
   DBI::dbGetQuery(con, "SELECT count(*) AS n FROM clinvar_policy_pathogenic_alleles")$n,
   10
 )
+expect_equal(
+  DBI::dbGetQuery(con, "SELECT count(*) AS n FROM clinvar_policy_allele_decisions")$n,
+  1
+)
+parquet <- tempfile("clinvar-decisions-", fileext = ".parquet")
+exported <- rclinvarbitration_export_clinvarbitration_parquet(
+  con, parquet, release_id = "fixture-vcv", assembly = "GRCh38"
+)
+expect_equal(exported$rows, 1)
+expect_equal(
+  DBI::dbGetQuery(con, paste0("SELECT * FROM read_parquet(", DBI::dbQuoteString(con, parquet), ")")),
+  data.frame(
+    contig = "chr17", position = 43082402L, reference = "A", alternate = "C",
+    clinical_significance = "Pathogenic/Likely Pathogenic", gold_stars = 1L,
+    allele_id = 97106L
+  )
+)
+expect_error(
+  rclinvarbitration_export_clinvarbitration_parquet(con, parquet, "fixture-vcv"),
+  "already exists"
+)
+unlink(parquet)
+
+write_gzip_lines <- function(path, lines) {
+  output <- gzfile(path, "wt")
+  on.exit(close(output), add = TRUE)
+  writeLines(lines, output)
+}
+submission_summary <- tempfile("submission-summary-", fileext = ".txt.gz")
+variant_summary <- tempfile("variant-summary-", fileext = ".txt.gz")
+reproduced <- tempfile("reproduced-decisions-", fileext = ".parquet")
+tsv <- function(...) paste(c(...), collapse = intToUtf8(9L))
+write_gzip_lines(variant_summary, c(
+  tsv("#AlleleID", "Assembly", "Chromosome", "VariationID", "PositionVCF", "ReferenceAlleleVCF", "AlternateAlleleVCF"),
+  tsv("11", "GRCh38", "1", "1", "101", "A", "G"),
+  tsv("12", "GRCh38", "2", "2", "202", "C", "T"),
+  tsv("13", "GRCh38", "X", "3", "303", "G", "A")
+))
+write_gzip_lines(submission_summary, c(
+  rep("## ClinVar submission summary metadata", 18L),
+  tsv("#VariationID", "ClinicalSignificance", "DateLastEvaluated", "ReviewStatus", "Submitter"),
+  tsv("1", "Pathogenic", "Jan 01, 2010", "no assertion criteria provided", "old-lab"),
+  tsv("1", "Benign", "Jan 01, 2020", "criteria provided, single submitter", "new-lab"),
+  tsv("2", "Pathogenic", "Jan 01, 2020", "reviewed by expert panel", "expert-first"),
+  tsv("2", "Benign", "Jan 02, 2020", "practice guideline", "practice-second"),
+  tsv("3", "Pathogenic", "Jan 01, 2020", "criteria provided, single submitter", "blind-lab"),
+  tsv("3", "Benign", "Jan 01, 2020", "criteria provided, single submitter", "independent-lab")
+))
+reproduced_info <- rclinvarbitration_reproduce_clinvarbitration_parquet(
+  con, submission_summary, variant_summary, reproduced,
+  submitter_exclusions = "blind-lab"
+)
+expect_equal(reproduced_info$rows, 3)
+reproduced_rows <- DBI::dbGetQuery(con, paste0(
+  "SELECT * FROM read_parquet(", DBI::dbQuoteString(con, reproduced), ") ORDER BY allele_id"
+))
+expect_equal(reproduced_rows$contig, c("chr1", "chr2", "chrX"))
+expect_equal(reproduced_rows$clinical_significance, c(
+  "Benign", "Pathogenic/Likely Pathogenic", "Benign"
+))
+expect_equal(reproduced_rows$gold_stars, c(1L, 4L, 1L))
+unlink(c(submission_summary, variant_summary, reproduced))
 
 text <- DBI::dbGetQuery(con, "
   SELECT s.scv_accession, t.section, t.text

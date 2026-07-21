@@ -6,6 +6,10 @@ output: github_document
 
 # RClinVarbitration
 
+[![R-CMD-check](https://github.com/sounkou-bioinfo/RClinVarbitration/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/sounkou-bioinfo/RClinVarbitration/actions/workflows/R-CMD-check.yaml)
+[![pkgdown](https://github.com/sounkou-bioinfo/RClinVarbitration/actions/workflows/pkgdown.yaml/badge.svg)](https://sounkou-bioinfo.github.io/RClinVarbitration/)
+[![r-universe](https://sounkou-bioinfo.r-universe.dev/badges/:name)](https://sounkou-bioinfo.r-universe.dev/)
+
 `RClinVarbitration` streams the complete official ClinVar VCV XML/XML.GZ
 release into focused relational DuckDB tables. It retains public VCV, RCV, SCV,
 AlleleID, VariationID, and disease identifiers instead of exposing XML parser
@@ -44,8 +48,14 @@ bundles and selects exact-version artifacts for DuckDB `v1.5.0` through
 | `clinvar_disease_submissions` | VCV/allele × SCV × disease submission |
 | `clinvar_policy_profiles` | named submitter-blinding profile |
 | `clinvar_policy_submitter_exclusions` | profile-specific submitter exclusion |
-| `clinvar_policy_decisions` | version/profile × allele × disease decision |
+| `clinvar_policy_decisions` | policy/profile × allele × disease decision |
+| `clinvar_policy_allele_decisions` | policy/profile × VCV/allele decision without disease grouping |
 | `clinvar_policy_pathogenic_alleles` | disease-specific P/LP normalized locus |
+
+`clinvar_locations` retains every source assembly location, including its VCF
+position, reference, and alternate alleles. `clinvar_normalized_alleles`
+exposes those normalized joins for GRCh37, GRCh38, and NCBI36; no GRCh37
+coordinates are discarded.
 
 The release-scale tables retain explicit logical key columns but do not create
 DuckDB ART indexes: those indexes must remain memory-resident and are a poor fit
@@ -138,7 +148,8 @@ alternative disease-aware policies.
 
 ```{r disease-aggregate-summary}
 disease_summary <- dbGetQuery(con, "
-  SELECT aggregate_classification, aggregate_review_status,
+  SELECT coalesce(aggregate_classification, '<not classified>') AS aggregate_classification,
+         aggregate_review_status,
          count(*) AS disease_aggregates,
          count(DISTINCT disease_identifier) AS identified_diseases
   FROM clinvar_disease_aggregates
@@ -152,7 +163,8 @@ knitr::kable(disease_summary, row.names = FALSE)
 ```{r disease-aggregate-examples}
 disease_aggregates <- dbGetQuery(con, "
   SELECT vcv_accession, rcv_accession,
-         disease_database, disease_identifier, disease_name,
+         disease_database, disease_identifier,
+         coalesce(disease_name, '<not supplied by ClinVar>') AS disease_name,
          aggregate_classification, aggregate_review_status
   FROM clinvar_disease_aggregates
   WHERE disease_identifier IS NOT NULL
@@ -165,6 +177,11 @@ knitr::kable(disease_aggregates, row.names = FALSE)
 Individual SCVs retain their disease mappings, submitters, dates, review status,
 and contribution flags. Policy SQL can therefore recompute an aggregate per
 allele and disease instead of accepting only ClinVar's top-line VCV label.
+Some source `ClinicalAssertion` records have the assertion type `variation to
+disease` and no germline classification; they remain queryable in
+`clinvar_scv_assertions` but cannot be policy votes, so the summary below
+excludes SQL-null classifications rather than rendering them as an ambiguous
+`NA`.
 
 ```{r disease-submission-summary}
 submission_summary <- dbGetQuery(con, "
@@ -172,6 +189,7 @@ submission_summary <- dbGetQuery(con, "
          count(*) AS disease_submissions,
          count(DISTINCT submitter_id) AS submitters
   FROM clinvar_disease_submissions
+  WHERE classification IS NOT NULL
   GROUP BY classification, review_status
   ORDER BY disease_submissions DESC
   LIMIT 20
@@ -179,15 +197,17 @@ submission_summary <- dbGetQuery(con, "
 knitr::kable(submission_summary, row.names = FALSE)
 ```
 
-## Versioned decision policy
+## ClinVarbitration decision policy
 
-The default policy is
-`cpg-clinvarbitration-2.2.11-disease-v1`, an attributed adaptation of Centre
-for Population Genomics ClinVarbitration 2.2.11. It preserves the upstream
-classification bins, 2016 ACMG threshold, 60/20 majority rule, review stars,
-and qualified Illumina benign exclusion, while grouping independently by
-allele and disease. Practice-guideline evidence precedes expert-panel evidence;
-disagreement within the highest available tier remains `Conflicting`.
+The policy identifier is `cpg-clinvarbitration-2.2.11`, pinned to Centre for
+Population Genomics ClinVarbitration 2.2.11 at the attributed upstream commit.
+There is no package-local `v1` suffix: disease scoping is made explicit by the
+view name. The SQL follows the upstream classification bins, 2016 ACMG
+threshold, 60/20 majority rule, review-star calculation, qualified Illumina
+benign exclusion, and first retained practice-guideline or expert-panel
+submission in source order. `clinvar_policy_decisions` applies that logic per
+allele and disease; `clinvar_policy_allele_decisions` applies it per VCV/allele
+without disease grouping.
 
 Unknown classifications do not vote. If any post-2015 or strong-review evidence
 exists for a disease/allele, ordinary older submissions are omitted. Additional
@@ -215,13 +235,15 @@ policy_summary <- dbGetQuery(con, "
 knitr::kable(policy_summary, row.names = FALSE)
 ```
 
-`clinvar_policy_pathogenic_alleles` is the disease-specific P/LP join surface;
-it does not perform VEP or PM5.
+`clinvar_policy_pathogenic_alleles` is the disease-specific P/LP join surface.
+It retains every source coordinate for a qualifying allele—including GRCh37
+and GRCh38—and does not perform VEP or PM5.
 
 ```{r policy-pathogenic-examples}
 pathogenic_examples <- dbGetQuery(con, "
   SELECT p.vcv_accession, p.allele_id,
-         p.disease_database, p.disease_identifier, p.disease_name,
+         p.disease_database, p.disease_identifier,
+         coalesce(p.disease_name, '<not supplied by ClinVar>') AS disease_name,
          p.gold_stars, n.assembly, n.chromosome, n.position_vcf,
          n.reference, n.alternate
   FROM readme_policy_decisions p
@@ -230,13 +252,49 @@ pathogenic_examples <- dbGetQuery(con, "
    AND n.vcv_accession = p.vcv_accession
    AND n.allele_id = p.allele_id
   WHERE p.policy_classification = 'Pathogenic/Likely Pathogenic'
-    AND n.assembly = 'GRCh38'
     AND p.disease_identifier IS NOT NULL
   ORDER BY p.vcv_accession, p.disease_key
   LIMIT 12
 ")
 knitr::kable(pathogenic_examples, row.names = FALSE)
 ```
+
+## Parquet decision outputs
+
+`rclinvarbitration_export_clinvarbitration_parquet()` writes the seven-column
+ClinVarbitration decision layout from the persisted VCV allele-policy view.
+It is an efficient VCV-derived annotation resource, but it does not collapse
+or overwrite distinct source loci for an AlleleID.
+
+```{r vcv-parquet}
+vcv_parquet <- tempfile("rclinvarbitration-vcv-policy-", fileext = ".parquet")
+vcv_parquet_info <- rclinvarbitration_export_clinvarbitration_parquet(
+  con, vcv_parquet, release_id = release_id, assembly = "GRCh38"
+)
+knitr::kable(
+  data.frame(rows = vcv_parquet_info$rows, assembly = vcv_parquet_info$assembly),
+  row.names = FALSE
+)
+unlink(vcv_parquet)
+```
+
+For an algorithm-level reproduction of the upstream artifact,
+`rclinvarbitration_reproduce_clinvarbitration_parquet()` instead consumes the
+matching archived NCBI `submission_summary` and `variant_summary` files. It
+implements the upstream 2.2.11 SQL-equivalent loop without Python, Hail, VEP,
+or PM5. It is deliberately separate from VCV disease policy because the
+upstream project itself uses those flat files.
+
+The archived March 5, 2026 flat files produce 4,125,389 GRCh38 rows. Against
+Centre for Population Genomics' March 24, 2026 [Zenodo record
+19196770](https://zenodo.org/records/19196770), 4,118,490 locus/AlleleID keys
+are shared and 1,863 have a classification or star difference. The remaining
+6,899 candidate-only and 16,865 reference-only keys demonstrate that the
+Zenodo run used a later live flat-file snapshot; this is a recorded differential
+baseline, not a claim of byte-for-byte identity across different inputs.
+`tools/compare_clinvarbitration_release.R` writes the candidate Parquet,
+non-equal differential Parquet, and this count summary from already-local
+archived files and a Zenodo TSV.
 
 ## Normalized allele join surface
 

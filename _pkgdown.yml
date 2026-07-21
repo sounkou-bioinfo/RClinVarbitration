@@ -14,6 +14,10 @@ reference:
       - rclinvarbitration_enable
       - rclinvarbitration_init
       - rclinvarbitration_import_xml
+  - title: Parquet outputs
+    contents:
+      - rclinvarbitration_export_clinvarbitration_parquet
+      - rclinvarbitration_reproduce_clinvarbitration_parquet
   - title: Schema and policy
     contents:
       - rclinvarbitration_schema_sql

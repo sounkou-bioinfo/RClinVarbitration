@@ -15,8 +15,9 @@ Description: Streams official 'ClinVar' VCV XML releases, including gzip
     extension uses libxml2's forward reader to retain VCV variants, normalized
     alleles, RCV aggregates, SCV submissions, conditions, observations,
     citations, and attributable evidence text without loading the release into
-    R. Versioned ClinVarbitration policy is a derived SQL layer over those
-    retained source relations.
+    R. ClinVarbitration policy is a derived SQL layer over those retained
+    source relations, with a separate direct reproducer for archived NCBI
+    flat-file releases.
 License: GPL (>= 2)
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)

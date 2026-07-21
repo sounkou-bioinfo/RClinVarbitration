@@ -1,5 +1,12 @@
 # RClinVarbitration 0.1.1
 
+- Remove the premature local `v1` policy suffix; preserve the pinned
+  `cpg-clinvarbitration-2.2.11` identifier, source-order strong-review rule,
+  and separate disease- and allele-level decision views.
+- Add Parquet exporters for the VCV-derived allele policy and for direct,
+  SQL-only reproduction of ClinVarbitration from versioned NCBI flat-file
+  archives, plus a retained differential script for published Zenodo releases.
+- Retain imported SCV source order for deterministic strong-review decisions.
 - Bundle exact `C_STRUCT_UNSTABLE` extension artifacts for DuckDB `v1.5.0`
   through `v1.5.4`, selected from the enabled connection's engine version.
 - Replace generic XML node/edge/statement persistence with a one-pass,
@@ -12,7 +19,7 @@
 - Add `clinvar_disease_aggregates` and `clinvar_disease_submissions` as direct
   RCV- and SCV-level disease-policy inputs, with canonical disease identifiers
   selected independently of the complete retained cross-reference relation.
-- Add the versioned `cpg-clinvarbitration-2.2.11-disease-v1` SQL policy,
+- Add the `cpg-clinvarbitration-2.2.11` SQL policy,
   configurable submitter-blinding profiles, and
   `clinvar_policy_pathogenic_alleles` as the disease-specific P/LP join surface
   for Rduckhts/DuckHTS.

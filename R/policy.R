@@ -3,24 +3,27 @@
 #' The identifier pins the policy semantics adapted from Centre for Population
 #' Genomics ClinVarbitration 2.2.11 (upstream commit
 #' `658b9f241eb2d43aa11214b153b19c1e18a16337`) and records that decisions are
-#' grouped per disease rather than only per variation.
+#' grouped per disease rather than only per variation. The identifier has no
+#' package-local suffix: the view names, rather than a speculative `v1`, state
+#' whether the output is disease-scoped or allele-scoped.
 #'
 #' @return A character scalar.
 #' @export
 rclinvarbitration_policy_version <- function() {
-  "cpg-clinvarbitration-2.2.11-disease-v1"
+  "cpg-clinvarbitration-2.2.11"
 }
 
-#' Versioned disease-specific ClinVarbitration policy SQL
+#' ClinVarbitration policy SQL
 #'
 #' Returns DuckDB views implementing the supported policy over
 #' `clinvar_disease_submissions`. The policy bins submitted classifications,
 #' excludes unknown bins and the upstream qualified Illumina benign exclusion,
 #' optionally applies profile-specific submitter exclusions, prefers evidence
 #' evaluated from 2016 onward while always retaining expert-panel and practice
-#' guideline evidence, and applies the 60/20 majority rule. Practice-guideline
-#' evidence takes precedence over expert-panel evidence; disagreement within
-#' the highest available review tier is reported as conflicting.
+#' guideline evidence, and applies the 60/20 majority rule. The disease-level
+#' and allele-level views both reproduce the upstream strong-review rule: the
+#' first retained practice-guideline or expert-panel classification in source
+#' order is decisive.
 #'
 #' `clinvar_policy_pathogenic_alleles` is the disease-specific pathogenic or
 #' likely-pathogenic join surface for downstream Rduckhts/DuckHTS annotation.
@@ -98,14 +101,9 @@ rclinvarbitration_policy_sql <- function(
       "count(*) FILTER (WHERE classification_bin = 'Pathogenic/Likely Pathogenic') AS pathogenic_count,",
       "count(*) FILTER (WHERE classification_bin = 'Benign') AS benign_count,",
       "count(*) FILTER (WHERE classification_bin = 'VUS') AS uncertain_count,",
-      "count(DISTINCT classification_bin) FILTER",
-      "(WHERE review_status_normalized = 'practice guideline') AS practice_classification_count,",
-      "max(classification_bin) FILTER",
-      "(WHERE review_status_normalized = 'practice guideline') AS practice_classification,",
-      "count(DISTINCT classification_bin) FILTER",
-      "(WHERE review_status_normalized = 'reviewed by expert panel') AS expert_classification_count,",
-      "max(classification_bin) FILTER",
-      "(WHERE review_status_normalized = 'reviewed by expert panel') AS expert_classification,",
+      "min_by(classification_bin, coalesce(source_ordinal, assertion_id)) FILTER",
+      "(WHERE review_status_normalized IN ('practice guideline', 'reviewed by expert panel'))",
+      "AS strong_review_classification,",
       "max(CASE WHEN classification_bin IN ('Pathogenic/Likely Pathogenic', 'Benign')",
       "AND review_status_normalized = 'practice guideline' THEN 4",
       "WHEN classification_bin IN ('Pathogenic/Likely Pathogenic', 'Benign')",
@@ -116,10 +114,7 @@ rclinvarbitration_policy_sql <- function(
       "FROM retained GROUP BY policy_version, profile_id, release_id, vcv_accession,",
       "allele_id, disease_key),",
       "decided AS (SELECT *, CASE",
-      "WHEN practice_classification_count > 1 THEN 'Conflicting'",
-      "WHEN practice_classification_count = 1 THEN practice_classification",
-      "WHEN expert_classification_count > 1 THEN 'Conflicting'",
-      "WHEN expert_classification_count = 1 THEN expert_classification",
+      "WHEN strong_review_classification IS NOT NULL THEN strong_review_classification",
       "WHEN pathogenic_count > 0 AND benign_count > 0 AND",
       "greatest(pathogenic_count, benign_count) >= retained_submission_count * 0.6 AND",
       "least(pathogenic_count, benign_count) <= retained_submission_count * 0.2",
@@ -136,6 +131,7 @@ rclinvarbitration_policy_sql <- function(
       "retained_scv_count, retained_submitter_count, pathogenic_count, benign_count, uncertain_count,",
       "latest_date_last_evaluated FROM decided"
     ),
+    policy_allele_decisions = rclinvarbitration_allele_policy_sql(policy_version),
     policy_pathogenic_alleles = paste(
       "CREATE OR REPLACE VIEW clinvar_policy_pathogenic_alleles AS SELECT",
       "d.policy_version, d.profile_id, d.release_id, d.vcv_accession, d.variation_id, d.allele_id,",
@@ -149,5 +145,90 @@ rclinvarbitration_policy_sql <- function(
       "AND n.allele_id = d.allele_id",
       "WHERE d.policy_classification = 'Pathogenic/Likely Pathogenic'"
     )
+  )
+}
+
+rclinvarbitration_allele_policy_sql <- function(policy_version) {
+  paste(
+    "CREATE OR REPLACE VIEW clinvar_policy_allele_decisions AS WITH classified AS (",
+    "SELECT p.policy_version, p.profile_id, s.release_id, s.vcv_accession,",
+    "v.variation_id, a.allele_id, s.assertion_entity_id, s.scv_accession,",
+    "s.scv_version, s.assertion_id, s.source_ordinal, s.submitter_name, s.classification,",
+    "s.review_status, s.date_last_evaluated,",
+    "lower(trim(coalesce(s.submitter_name, ''))) AS submitter_normalized,",
+    "lower(trim(coalesce(s.review_status, ''))) AS review_status_normalized,",
+    "CASE lower(trim(coalesce(s.classification, '')))",
+    "WHEN 'pathogenic' THEN 'Pathogenic/Likely Pathogenic'",
+    "WHEN 'likely pathogenic' THEN 'Pathogenic/Likely Pathogenic'",
+    "WHEN 'pathogenic, low penetrance' THEN 'Pathogenic/Likely Pathogenic'",
+    "WHEN 'likely pathogenic, low penetrance' THEN 'Pathogenic/Likely Pathogenic'",
+    "WHEN 'pathogenic/likely pathogenic' THEN 'Pathogenic/Likely Pathogenic'",
+    "WHEN 'benign' THEN 'Benign' WHEN 'likely benign' THEN 'Benign'",
+    "WHEN 'benign/likely benign' THEN 'Benign' WHEN 'protective' THEN 'Benign'",
+    "WHEN 'uncertain significance' THEN 'VUS'",
+    "WHEN 'uncertain risk allele' THEN 'VUS' ELSE 'Unknown' END AS classification_bin",
+    "FROM clinvar_scv_assertions s JOIN clinvar_variants v USING (release_id, vcv_accession)",
+    "LEFT JOIN clinvar_alleles a ON a.release_id = s.release_id",
+    "AND a.vcv_accession = s.vcv_accession AND a.parent_allele_entity_id IS NULL",
+    "JOIN clinvar_policy_profiles p",
+    paste0("ON p.policy_version = '", policy_version, "'),"),
+    "eligible AS (SELECT c.* FROM classified c WHERE c.classification_bin <> 'Unknown'",
+    "AND NOT (c.classification_bin = 'Benign'",
+    "AND c.submitter_normalized = 'illumina laboratory services; illumina')",
+    "AND NOT EXISTS (SELECT 1 FROM clinvar_policy_submitter_exclusions e",
+    "WHERE e.policy_version = c.policy_version AND e.profile_id = c.profile_id",
+    "AND lower(trim(e.submitter_name)) = c.submitter_normalized",
+    "AND (e.classification_bin IS NULL",
+    "OR lower(trim(e.classification_bin)) = lower(c.classification_bin)))),",
+    "deduplicated AS (SELECT * FROM eligible QUALIFY row_number() OVER (",
+    "PARTITION BY policy_version, profile_id, release_id, vcv_accession, allele_id,",
+    "assertion_entity_id ORDER BY scv_version DESC NULLS LAST, assertion_id NULLS LAST) = 1),",
+    "dated AS (SELECT *,",
+    "(coalesce(date_last_evaluated, DATE '1970-01-01') >= DATE '2016-01-01'",
+    "OR review_status_normalized IN ('practice guideline', 'reviewed by expert panel')) AS is_modern,",
+    "max(CASE WHEN coalesce(date_last_evaluated, DATE '1970-01-01') >= DATE '2016-01-01'",
+    "OR review_status_normalized IN ('practice guideline', 'reviewed by expert panel')",
+    "THEN 1 ELSE 0 END) OVER (PARTITION BY policy_version, profile_id, release_id,",
+    "vcv_accession, allele_id) AS has_modern,",
+    "count(*) OVER (PARTITION BY policy_version, profile_id, release_id,",
+    "vcv_accession, allele_id) AS eligible_submission_count FROM deduplicated),",
+    "retained AS (SELECT * FROM dated WHERE has_modern = 0 OR is_modern),",
+    "summarized AS (SELECT policy_version, profile_id, release_id, vcv_accession,",
+    "max(variation_id) AS variation_id, allele_id,",
+    "max(eligible_submission_count) AS eligible_submission_count,",
+    "count(*) AS retained_submission_count,",
+    "count(DISTINCT assertion_entity_id) AS retained_scv_count,",
+    "count(DISTINCT submitter_normalized) AS retained_submitter_count,",
+    "max(has_modern) = 1 AS modern_filter_applied,",
+    "count(*) FILTER (WHERE classification_bin = 'Pathogenic/Likely Pathogenic') AS pathogenic_count,",
+    "count(*) FILTER (WHERE classification_bin = 'Benign') AS benign_count,",
+    "count(*) FILTER (WHERE classification_bin = 'VUS') AS uncertain_count,",
+    "min_by(classification_bin, coalesce(source_ordinal, assertion_id)) FILTER",
+    "(WHERE review_status_normalized IN ('practice guideline', 'reviewed by expert panel'))",
+    "AS strong_review_classification,",
+    "max(CASE WHEN classification_bin IN ('Pathogenic/Likely Pathogenic', 'Benign')",
+    "AND review_status_normalized = 'practice guideline' THEN 4",
+    "WHEN classification_bin IN ('Pathogenic/Likely Pathogenic', 'Benign')",
+    "AND review_status_normalized = 'reviewed by expert panel' THEN 3",
+    "WHEN classification_bin IN ('Pathogenic/Likely Pathogenic', 'Benign')",
+    "AND review_status_normalized <> 'no assertion criteria provided' THEN 1 ELSE 0 END) AS gold_stars,",
+    "max(date_last_evaluated) AS latest_date_last_evaluated",
+    "FROM retained GROUP BY policy_version, profile_id, release_id, vcv_accession, allele_id),",
+    "decided AS (SELECT *, CASE",
+    "WHEN strong_review_classification IS NOT NULL THEN strong_review_classification",
+    "WHEN pathogenic_count > 0 AND benign_count > 0 AND",
+    "greatest(pathogenic_count, benign_count) >= retained_submission_count * 0.6 AND",
+    "least(pathogenic_count, benign_count) <= retained_submission_count * 0.2",
+    "THEN CASE WHEN benign_count > pathogenic_count THEN 'Benign'",
+    "ELSE 'Pathogenic/Likely Pathogenic' END",
+    "WHEN pathogenic_count > 0 AND benign_count > 0 THEN 'Conflicting'",
+    "WHEN uncertain_count > retained_submission_count * 0.6 THEN 'VUS'",
+    "WHEN pathogenic_count > 0 THEN 'Pathogenic/Likely Pathogenic'",
+    "WHEN benign_count > 0 THEN 'Benign' ELSE 'VUS' END AS policy_classification",
+    "FROM summarized)",
+    "SELECT policy_version, profile_id, release_id, vcv_accession, variation_id, allele_id,",
+    "policy_classification, gold_stars, modern_filter_applied, eligible_submission_count,",
+    "retained_submission_count, retained_scv_count, retained_submitter_count,",
+    "pathogenic_count, benign_count, uncertain_count, latest_date_last_evaluated FROM decided"
   )
 }
