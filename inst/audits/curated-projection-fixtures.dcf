@@ -1,0 +1,19 @@
+Fixture: VCV_XML_HPO_CURATED_VCV000158424.xml.gz
+Source-Release: NCBI ClinVar VCV 2026-07-02
+Source-Release-SHA256: cee52f9c258686374e8b8c568cba49e9b7639067a5f2ee0f534412f9341bb833
+Source-VCV: VCV000158424
+Fixture-SHA256: 2b431b97f973ee313016c4db8dc00bc79676a19f5bd449320c64c1221cd866d9
+Expected-SCV: SCV000192942
+Expected-Assertion-Entity: VCV000158424#assertion/340778
+Expected-Context: VCV000158424#assertion/340778#condition/2
+Expected-HPO: HP:0002282
+Validation-Scope: Exact source-context projection only; no claim of phenotype relevance or evidence admissibility.
+
+Fixture: VCV_XML_VCV000091629.xml.gz
+Source-Release: NCBI ClinVar VCV fixture retained by the package
+Source-VCV: VCV000091629
+Expected-SCV: SCV000827729
+Expected-Assertion-Entity: VCV000091629#assertion/1599586
+Expected-PubMed: 21735045
+Expected-URL: https://pubmed.ncbi.nlm.nih.gov/21735045/
+Validation-Scope: Exact source-context and URL projection only; no claim that citation presence is clinical evidence.

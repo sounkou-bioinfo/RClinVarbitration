@@ -21,10 +21,16 @@ canonical <- DBI::dbGetQuery(con, "SELECT disease_database, disease_identifier, 
 expect_equal(canonical$disease_database, "OMIM")
 expect_equal(canonical$disease_identifier, "123")
 expect_equal(canonical$disease_key, "omim:123")
-expect_equal(
-  DBI::dbGetQuery(con, "SELECT hpo_id FROM clinvar_hpo_terms")$hpo_id,
-  "HP:0000001"
-)
+hpo <- DBI::dbGetQuery(con, "
+  SELECT vcv_accession, scv_entity_id, context_type, context_id, xref_id, hpo_id
+  FROM clinvar_hpo_terms
+")
+expect_equal(hpo$hpo_id, "HP:0000001")
+expect_equal(hpo$vcv_accession, "VCVX")
+expect_equal(hpo$scv_entity_id, "assertion-x")
+expect_equal(hpo$context_type, "condition")
+expect_equal(hpo$context_id, "condition-x")
+expect_equal(hpo$xref_id, "xref-hp")
 
 DBI::dbExecute(con, "DROP VIEW clinvar_policy_pathogenic_alleles")
 DBI::dbExecute(con, "DROP VIEW clinvar_policy_decisions")

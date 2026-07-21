@@ -37,9 +37,12 @@ archive is preferable.
 
 At package installation, the native C source is built separately for every
 supported DuckDB version. `rclinvarbitration_enable()` selects the artifact
-whose embedded DuckDB version and platform match the active connection. This
-is package-owned compatibility material, not downloaded code and not a cache
-that silently falls back to another DuckDB ABI.
+whose embedded DuckDB version and exact `PRAGMA platform` value match the active
+connection. Windows packages include both `windows_amd64` and R-devel's
+`windows_amd64_mingw` metadata identities over the same Rtools/MinGW machine
+code because DuckDB validates that identity literally. This is package-owned
+compatibility material, not downloaded code and not a cache that silently
+falls back to another DuckDB ABI.
 
 ### Persistent relational release store
 

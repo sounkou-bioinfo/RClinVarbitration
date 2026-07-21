@@ -3,10 +3,21 @@ expect_true(nzchar(fixture))
 expect_true(file.exists(fixture))
 
 supported_versions <- paste0("v1.5.", 0:4)
-artifact_paths <- vapply(supported_versions, rclinvarbitration_extension_path, character(1))
-expect_equal(basename(dirname(artifact_paths)), supported_versions)
+platform_con <- DBI::dbConnect(duckdb::duckdb())
+engine_platform <- DBI::dbGetQuery(platform_con, "PRAGMA platform")$platform
+DBI::dbDisconnect(platform_con, shutdown = TRUE)
+artifact_paths <- vapply(
+  supported_versions,
+  rclinvarbitration_extension_path,
+  character(1),
+  duckdb_platform = engine_platform
+)
+expect_equal(basename(dirname(dirname(artifact_paths))), supported_versions)
+expect_equal(basename(dirname(artifact_paths)), rep(engine_platform, length(supported_versions)))
 expect_true(all(file.exists(artifact_paths)))
-expect_error(rclinvarbitration_extension_path("v1.4.3"), "no artifact")
+expect_error(
+  rclinvarbitration_extension_path("v1.4.3", engine_platform), "no artifact"
+)
 
 extension_directory <- tempfile("rclinvarbitration-duckdb-extensions-")
 con <- DBI::dbConnect(duckdb::duckdb(config = list(
@@ -171,6 +182,53 @@ literature <- DBI::dbGetQuery(con, "
 ")
 expect_true(nrow(literature) > 5L)
 expect_true(all(grepl("^https://pubmed.ncbi.nlm.nih.gov/", literature$literature_url)))
+# Curated against the source XML: PMID 21735045 is attached to
+# SCV000827729 (assertion 1599586), not to the VCV as an admissibility claim.
+curated_literature <- DBI::dbGetQuery(con, "
+  SELECT l.context_type, l.context_id, l.scv_entity_id, s.scv_accession,
+         l.source, l.identifier, l.literature_url
+  FROM clinvar_literature_links l
+  JOIN clinvar_scv_assertions s
+    ON s.release_id = l.release_id AND s.assertion_entity_id = l.scv_entity_id
+  WHERE l.identifier = '21735045'
+")
+expect_equal(nrow(curated_literature), 1L)
+expect_equal(curated_literature$context_type, "scv_assertion")
+expect_equal(curated_literature$context_id, "VCV000091629#assertion/1599586")
+expect_equal(curated_literature$scv_accession, "SCV000827729")
+expect_equal(curated_literature$source, "PubMed")
+expect_equal(
+  curated_literature$literature_url,
+  "https://pubmed.ncbi.nlm.nih.gov/21735045/"
+)
+
+# A curated real NCBI record from the measured 2026-07-02 release validates
+# HPO projection while preserving source context. This asserts the link only,
+# never its clinical relevance or evidence admissibility.
+curated_fixture <- system.file(
+  "extdata", "VCV_XML_HPO_CURATED_VCV000158424.xml.gz",
+  package = "RClinVarbitration"
+)
+rclinvarbitration_import_xml(con, curated_fixture, "curated-hpo-projection")
+curated_hpo <- DBI::dbGetQuery(con, "
+  SELECT h.vcv_accession, h.scv_entity_id, s.scv_accession, h.context_type,
+         h.context_id, h.hpo_id, h.xref_type
+  FROM clinvar_hpo_terms h
+  JOIN clinvar_scv_assertions s
+    ON s.release_id = h.release_id AND s.assertion_entity_id = h.scv_entity_id
+  WHERE h.release_id = 'curated-hpo-projection'
+")
+expect_equal(nrow(curated_hpo), 1L)
+expect_equal(curated_hpo$vcv_accession, "VCV000158424")
+expect_equal(curated_hpo$scv_entity_id, "VCV000158424#assertion/340778")
+expect_equal(curated_hpo$scv_accession, "SCV000192942")
+expect_equal(curated_hpo$context_type, "condition")
+expect_equal(
+  curated_hpo$context_id,
+  "VCV000158424#assertion/340778#condition/2"
+)
+expect_equal(curated_hpo$hpo_id, "HP:0002282")
+expect_true(is.na(curated_hpo$xref_type))
 parquet <- tempfile("clinvar-decisions-", fileext = ".parquet")
 exported <- rclinvarbitration_export_clinvarbitration_parquet(
   con, parquet, release_id = "fixture-vcv", assembly = "GRCh38"
@@ -286,6 +344,6 @@ expect_error(
 expect_error(rclinvarbitration_import_xml(con, fixture, release_id = "fixture-vcv"), "already exists")
 replaced <- rclinvarbitration_import_xml(con, fixture, release_id = "fixture-vcv", replace = TRUE)
 expect_equal(replaced[["variants"]], 1)
-expect_equal(DBI::dbGetQuery(con, "SELECT count(*) AS n FROM clinvar_releases")$n, 1)
+expect_equal(DBI::dbGetQuery(con, "SELECT count(*) AS n FROM clinvar_releases")$n, 2)
 
 DBI::dbDisconnect(con, shutdown = TRUE)

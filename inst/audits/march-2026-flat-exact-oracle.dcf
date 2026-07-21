@@ -1,0 +1,31 @@
+Audit: March 2026 exact-input flat-file oracle
+Audit-Date-UTC: 2026-07-21
+Assembly: GRCh38
+Policy: CPG ClinVarbitration 2.2.11
+Upstream-Repository: https://github.com/populationgenomics/clinvarbitration
+Upstream-Commit: 658b9f241eb2d43aa11214b153b19c1e18a16337
+Upstream-Algorithm-Path: src/clinvarbitration/scripts/resummarise_clinvar.py
+Upstream-Algorithm-SHA256: 8316ae78822436e621312bc76dd85d400f9ff9bc7e017c87d2e4b1936510e50b
+Submission-Source: submission_summary_2026-03.txt.gz
+Submission-SHA256: dfc875bc831292b857d8d0a85eb57157452e12f04fbc3591addbf59208de727f
+Variant-Source: variant_summary_2026-03.txt.gz
+Variant-SHA256: 0d6c0c8760529befdfc1fbfcfa90cfb0aa11bfc5fe72176ac9bc9820884f710e
+Configuration: assembly=GRCh38; BLACKLIST empty; upstream QUALIFIED_BLACKLIST unchanged; TSV stage only
+Execution-Note: The pinned module was loaded unmodified with inert hail/loguru stubs; module.main() ran through write_dicts_as_tsv() and was deliberately stopped before Hail, VCF, and PM5 post-processing.
+Python-Version: 3.13.12
+Upstream-Output: upstream-658b9f2-march-2026-clinvar-decisions.tsv
+Upstream-Output-Bytes: 148011543
+Upstream-Output-Rows: 4125389
+Upstream-Output-SHA256: 35ffe949d488b6d0a79bba3a3295e810f4b79e193ffdb5b4da15faedfe1970ee
+RClinVarbitration-Commit: 51998e8429be1b2387a435571b3b0a526c32a206
+RClinVarbitration-DuckDB-Version: 1.5.3
+RClinVarbitration-Output: clinvar-flat-2026-03-clinvarbitration-grch38.parquet
+RClinVarbitration-Output-Bytes: 37645897
+RClinVarbitration-Output-Rows: 4125389
+RClinVarbitration-Output-SHA256: 0d65c8f67a99b35d99029d0e998c3167e56fc3d15f250732b3ae84a004fe4828
+Comparison-Key: contig,position,reference,alternate,allele_id
+Shared-Keys: 4125389
+Candidate-Only-Keys: 0
+Reference-Only-Keys: 0
+Classification-Or-Star-Disagreements: 0
+Exact-Agreement: 100%

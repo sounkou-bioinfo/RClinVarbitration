@@ -159,6 +159,22 @@ and submitter counts, per-bin counts, modern-filter status, and the latest
 retained assessment date. Disease decisions additionally retain disease
 identity and name.
 
+## Complete-release differential validation
+
+The March 2026 archived flat files were executed through both the pinned
+upstream 2.2.11 TSV code and this package's flat reproducer. All 4,125,389 keys,
+classifications, and star values matched exactly. The manifest records input,
+code, configuration, and output digests.
+
+The monthly XML and flat products are not row-equivalent: 16 shared keys differ
+and 361 keys occur on only one path. Every key is classified in the audit with
+source-row receipts. Of 377 total, 369 arise because the flat classification is
+`-` while XML has a current germline classification, one is a divergent
+three-row flat representation of one XML SCV assertion, five use different
+source vocabularies, and two are child locations of compound CYP2C19 alleles
+excluded by the top-level allele compatibility export. These are source-model
+and documented scope differences, not unexplained decision arithmetic.
+
 Use source tables to inspect a result rather than treating the projected label
 as sufficient evidence:
 

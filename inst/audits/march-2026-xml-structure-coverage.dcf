@@ -1,0 +1,20 @@
+Audit: March 2026 XML structure coverage
+Audit-Date-UTC: 2026-07-21
+XML-Source: ClinVarVCVRelease_2026-03.xml.gz
+XML-Source-SHA256: 8c369922c38958bdba0c99225d2db794cd02995930b98cfce7a4754faf65f7c8
+Counter-Source: tools/audit_xml_structure_coverage.c
+Counter-Source-SHA256: 138c0be0f241afcb250af60262d946091849194c4ad647bc808dd66e2c3bc92f
+Count-Receipt: march-2026-xml-structure-counts.tsv
+Count-Receipt-SHA256: b4866f0d1df6201c0a062313f4f6f19a5a9e9ef7f04e08ee12e9dc0014f6ec91
+VariationArchive-Elements: 4478872
+Imported-Variant-Rows: 4478872
+ClinicalAssertion-Elements: 6813140
+Imported-SCV-Rows: 6813140
+ObservedIn-Elements: 6869122
+Imported-Observation-Rows: 6869122
+Sample-Elements: 6869122
+Method-Elements: 6877237
+ObservedData-Elements: 6494488
+MolecularConsequence-Elements: 24908913
+FunctionalConsequence-Elements: 564026
+Conclusion: VariationArchive, ClinicalAssertion, and ObservedIn each map one-to-one to their typed relation. Sample and Method are flattened only partially into clinvar_observations; multiple methods and unselected sample fields are not typed. ObservedData attributes are retained generically, without a dedicated ObservedData relation. MolecularConsequence and FunctionalConsequence have no dedicated typed relation.

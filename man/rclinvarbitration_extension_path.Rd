@@ -4,11 +4,16 @@
 \alias{rclinvarbitration_extension_path}
 \title{Locate a version-matched RClinVarbitration DuckDB extension}
 \usage{
-rclinvarbitration_extension_path(duckdb_version = NULL)
+rclinvarbitration_extension_path(duckdb_version = NULL, duckdb_platform = NULL)
 }
 \arguments{
 \item{duckdb_version}{Exact DuckDB version, with or without a \code{v} prefix.
 \code{NULL} selects the version reported by the installed \code{duckdb} package.}
+
+\item{duckdb_platform}{Exact platform reported by \verb{PRAGMA platform}. \code{NULL}
+queries a temporary connection to the installed \code{duckdb} package. DuckDB
+distinguishes \code{windows_amd64} from R-devel's \code{windows_amd64_mingw} even
+though both artifacts contain the same MinGW-built machine code.}
 }
 \value{
 An absolute extension path.

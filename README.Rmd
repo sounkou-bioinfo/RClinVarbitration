@@ -38,13 +38,12 @@ build.
 
 ## Quick start
 
-```{r quick-start, eval=FALSE}
+```{r quick-start}
 library(DBI)
 library(duckdb)
 library(RClinVarbitration)
 
 con <- dbConnect(duckdb(config = list(allow_unsigned_extensions = "true")))
-on.exit(dbDisconnect(con, shutdown = TRUE))
 
 rclinvarbitration_enable(con)
 rclinvarbitration_init(con)
@@ -54,7 +53,9 @@ xml <- system.file(
   "extdata", "VCV_XML_VCV000091629.xml.gz",
   package = "RClinVarbitration"
 )
-rclinvarbitration_import_xml(con, xml, release_id = "clinvar-example")
+imported <- rclinvarbitration_import_xml(
+  con, xml, release_id = "clinvar-example"
+)
 
 dbGetQuery(con, "
   SELECT vcv_accession, variation_id, aggregate_classification
@@ -115,7 +116,7 @@ Imports retain all source submissions. Exclusions are parameters of decision
 export, so the evidence remains available for audit and alternative policies.
 Names are matched case-insensitively after trimming whitespace.
 
-```{r export, eval=FALSE}
+```{r export}
 out <- tempfile(fileext = ".parquet")
 rclinvarbitration_export_clinvarbitration_parquet(
   con,
@@ -151,9 +152,22 @@ The XML-derived Parquet export has the upstream seven-column decision schema,
 but is not expected to be byte-identical because its source and grouping differ.
 
 The archived-flat-file reproducer is retained only as a differential-validation
-utility; it is redundant for ordinary XML imports. The
-[ERRATA audit](https://github.com/sounkou-bioinfo/RClinVarbitration/blob/main/docs/ERRATA.md) reports a matched March 2026 XML/flat comparison
-and a separate comparison with the published upstream artifact.
+utility; it is redundant for ordinary XML imports. An exact-input execution
+of the pinned upstream Python TSV stage and this package's flat reproducer over
+the complete March 2026 archives produced the same 4,125,389 keys with zero
+classification or star differences. Input, code, configuration, and output
+digests are in the
+[oracle manifest](https://github.com/sounkou-bioinfo/RClinVarbitration/blob/main/inst/audits/march-2026-flat-exact-oracle.dcf).
+
+The independently matched XML/flat audit classified every one of the 16 shared
+value differences and 361 key-set differences with source-row receipts. Most
+come from NCBI flat rows whose classification is `-` while XML carries a current
+classification; the remainder are one duplicate-SCV identity case, five source
+vocabulary differences, and two nested compound alleles. The
+[ERRATA audit](https://github.com/sounkou-bioinfo/RClinVarbitration/blob/main/docs/ERRATA.md)
+contains the full counts and receipts. A published Zenodo release with 16,865
+reference-only keys used an unpinned source snapshot; it is not the exact-input
+conformance result.
 
 One deliberate edge-case difference is that RClinVarbitration applies the
 qualified Illumina benign exclusion declared by upstream. At the pinned commit,
@@ -175,6 +189,10 @@ release history, and the source-observation model planned by
 These workflows retrieve and rank evidence; an embedding neighbor does not
 classify a variant. Provider identity, release, source rows, deterministic
 evidence admission, and human review must remain explicit.
+
+```{r cleanup, include=FALSE}
+dbDisconnect(con, shutdown = TRUE)
+```
 
 ## Acknowledgements
 

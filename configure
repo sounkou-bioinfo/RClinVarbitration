@@ -96,21 +96,24 @@ fi
 if [ "$WASM_BUILD" = yes ]; then
   # DuckDB's webR/duckdb-wasm loader accepts Emscripten side modules under
   # this platform identity, matching the Rducks extension contract.
-  PLATFORM=linux_i686_musl
+  PLATFORMS=linux_i686_musl
   SHARED_FLAGS='-shared -fPIC'
   EXTRA_CFLAGS=''
   EXT_EXPORT_FLAGS='-Wl,--export=rclinvarbitration_init_c_api'
 else
   EXT_EXPORT_FLAGS=''
   case "$OS/$ARCH" in
-    Linux/x86_64) PLATFORM=linux_amd64; SHARED_FLAGS='-shared -fPIC -Wl,--exclude-libs,ALL -Wl,-Bsymbolic-functions'; EXTRA_CFLAGS='' ;;
-    Linux/aarch64|Linux/arm64) PLATFORM=linux_arm64; SHARED_FLAGS='-shared -fPIC -Wl,--exclude-libs,ALL -Wl,-Bsymbolic-functions'; EXTRA_CFLAGS='' ;;
+    Linux/x86_64) PLATFORMS=linux_amd64; SHARED_FLAGS='-shared -fPIC -Wl,--exclude-libs,ALL -Wl,-Bsymbolic-functions'; EXTRA_CFLAGS='' ;;
+    Linux/aarch64|Linux/arm64) PLATFORMS=linux_arm64; SHARED_FLAGS='-shared -fPIC -Wl,--exclude-libs,ALL -Wl,-Bsymbolic-functions'; EXTRA_CFLAGS='' ;;
     # DuckDB's exact v1.5 headers retain legacy empty-prototype declarations.
     # Keep -Werror for package code while preventing current Apple Clang from
     # rejecting that vendored-header-only diagnostic.
-    Darwin/x86_64) PLATFORM=osx_amd64; SHARED_FLAGS='-shared -fPIC -undefined dynamic_lookup -Wl,-exported_symbol,_rclinvarbitration_init_c_api'; EXTRA_CFLAGS='-Wno-error=strict-prototypes' ;;
-    Darwin/arm64) PLATFORM=osx_arm64; SHARED_FLAGS='-shared -fPIC -undefined dynamic_lookup -Wl,-exported_symbol,_rclinvarbitration_init_c_api'; EXTRA_CFLAGS='-Wno-error=strict-prototypes' ;;
-    MINGW*/x86_64|MSYS*/x86_64|CYGWIN*/x86_64) PLATFORM=windows_amd64; SHARED_FLAGS='-shared'; EXTRA_CFLAGS='' ;;
+    Darwin/x86_64) PLATFORMS=osx_amd64; SHARED_FLAGS='-shared -fPIC -undefined dynamic_lookup -Wl,-exported_symbol,_rclinvarbitration_init_c_api'; EXTRA_CFLAGS='-Wno-error=strict-prototypes' ;;
+    Darwin/arm64) PLATFORMS=osx_arm64; SHARED_FLAGS='-shared -fPIC -undefined dynamic_lookup -Wl,-exported_symbol,_rclinvarbitration_init_c_api'; EXTRA_CFLAGS='-Wno-error=strict-prototypes' ;;
+    # CRAN release builds currently report windows_amd64 while R-devel's
+    # MinGW toolchain reports windows_amd64_mingw. The machine code is the
+    # same, but DuckDB validates the embedded platform metadata exactly.
+    MINGW*/x86_64|MSYS*/x86_64|CYGWIN*/x86_64) PLATFORMS='windows_amd64 windows_amd64_mingw'; SHARED_FLAGS='-shared'; EXTRA_CFLAGS='' ;;
     *) echo "ERROR: unsupported DuckDB extension platform: $OS/$ARCH" >&2; exit 1 ;;
   esac
 fi
@@ -129,21 +132,25 @@ for DUCKDB_VERSION in $BUILD_VERSIONS; do
   HEADER_DIR="$CAPI_ROOT/$DUCKDB_VERSION"
   OUT_DIR="$BUILD_ROOT/$DUCKDB_VERSION"
   RAW="$OUT_DIR/rclinvarbitration.duckdb_extension.raw"
-  FINAL="$OUT_DIR/rclinvarbitration.duckdb_extension"
   CPPFLAGS="-DNDEBUG -DDUCKDB_EXTENSION_NAME=rclinvarbitration -DDUCKDB_EXTENSION_API_VERSION_UNSTABLE=$DUCKDB_VERSION -DDUCKDB_EXTENSION_API_UNSTABLE_VERSION=\"$DUCKDB_VERSION\" -I$HEADER_DIR $XML_CFLAGS $ZLIB_CFLAGS"
   mkdir -p "$OUT_DIR"
 
   echo "Building RClinVarbitration extension for DuckDB $DUCKDB_VERSION..."
   "$CC" $SHARED_FLAGS $CFLAGS $CPPFLAGS $R_LDFLAGS $CONFIGURE_LDFLAGS \
     -o "$RAW" $EXT_EXPORT_FLAGS "$SOURCE" $XML_LIBS $ZLIB_LIBS
-  "${R_HOME}/bin/Rscript" "$METADATA" \
-    --library-file "$RAW" \
-    --out-file "$FINAL" \
-    --extension-name rclinvarbitration \
-    --duckdb-platform "$PLATFORM" \
-    --duckdb-version "$DUCKDB_VERSION" \
-    --extension-version "$VERSION" \
-    --abi-type C_STRUCT_UNSTABLE
+  for METADATA_PLATFORM in $PLATFORMS; do
+    PLATFORM_DIR="$OUT_DIR/$METADATA_PLATFORM"
+    FINAL="$PLATFORM_DIR/rclinvarbitration.duckdb_extension"
+    mkdir -p "$PLATFORM_DIR"
+    "${R_HOME}/bin/Rscript" "$METADATA" \
+      --library-file "$RAW" \
+      --out-file "$FINAL" \
+      --extension-name rclinvarbitration \
+      --duckdb-platform "$METADATA_PLATFORM" \
+      --duckdb-version "$DUCKDB_VERSION" \
+      --extension-version "$VERSION" \
+      --abi-type C_STRUCT_UNSTABLE
+  done
   rm -f "$RAW"
 done
 

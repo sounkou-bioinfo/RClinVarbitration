@@ -19,9 +19,40 @@ rclinvarbitration_connection_version <- function(con) {
   rclinvarbitration_normalize_duckdb_version(version)
 }
 
+rclinvarbitration_normalize_duckdb_platform <- function(platform) {
+  platform <- as.character(platform)
+  if (length(platform) != 1L || is.na(platform) ||
+      !grepl("^[A-Za-z0-9_]+$", platform)) {
+    stop("DuckDB platform must be one exact platform identifier.", call. = FALSE)
+  }
+  platform
+}
+
+rclinvarbitration_connection_platform <- function(con) {
+  platform <- DBI::dbGetQuery(con, "PRAGMA platform")$platform
+  if (length(platform) != 1L || is.na(platform)) {
+    stop("could not determine the DuckDB engine platform.", call. = FALSE)
+  }
+  rclinvarbitration_normalize_duckdb_platform(platform)
+}
+
+rclinvarbitration_installed_duckdb_platform <- function() {
+  if (!requireNamespace("duckdb", quietly = TRUE)) {
+    stop("supply `duckdb_platform` or install the duckdb package.", call. = FALSE)
+  }
+  con <- DBI::dbConnect(duckdb::duckdb())
+  on.exit(DBI::dbDisconnect(con, shutdown = TRUE), add = TRUE)
+  rclinvarbitration_connection_platform(con)
+}
+
 rclinvarbitration_bundled_duckdb_versions <- function(root) {
   versions <- list.files(root, pattern = "^v[0-9]+\\.[0-9]+\\.[0-9]+$")
-  versions <- versions[file.exists(file.path(root, versions, "rclinvarbitration.duckdb_extension"))]
+  versions <- versions[vapply(versions, function(version) {
+    length(list.files(
+      file.path(root, version), pattern = "^rclinvarbitration\\.duckdb_extension$",
+      recursive = TRUE
+    )) > 0L
+  }, logical(1))]
   if (!length(versions)) return(character())
   paste0("v", as.character(sort(numeric_version(sub("^v", "", versions)))))
 }
@@ -33,9 +64,14 @@ rclinvarbitration_bundled_duckdb_versions <- function(root) {
 #'
 #' @param duckdb_version Exact DuckDB version, with or without a `v` prefix.
 #'   `NULL` selects the version reported by the installed `duckdb` package.
+#' @param duckdb_platform Exact platform reported by `PRAGMA platform`. `NULL`
+#'   queries a temporary connection to the installed `duckdb` package. DuckDB
+#'   distinguishes `windows_amd64` from R-devel's `windows_amd64_mingw` even
+#'   though both artifacts contain the same MinGW-built machine code.
 #' @return An absolute extension path.
 #' @export
-rclinvarbitration_extension_path <- function(duckdb_version = NULL) {
+rclinvarbitration_extension_path <- function(
+    duckdb_version = NULL, duckdb_platform = NULL) {
   if (is.null(duckdb_version)) {
     if (!requireNamespace("duckdb", quietly = TRUE)) {
       stop("supply `duckdb_version` or install the duckdb package.", call. = FALSE)
@@ -47,14 +83,29 @@ rclinvarbitration_extension_path <- function(duckdb_version = NULL) {
     duckdb_version <- version
   }
   duckdb_version <- rclinvarbitration_normalize_duckdb_version(duckdb_version)
+  if (is.null(duckdb_platform)) {
+    duckdb_platform <- rclinvarbitration_installed_duckdb_platform()
+  }
+  duckdb_platform <- rclinvarbitration_normalize_duckdb_platform(duckdb_platform)
   root <- system.file("rclinvarbitration_extension", "build", package = "RClinVarbitration", mustWork = TRUE)
-  path <- file.path(root, duckdb_version, "rclinvarbitration.duckdb_extension")
+  path <- file.path(
+    root, duckdb_version, duckdb_platform, "rclinvarbitration.duckdb_extension"
+  )
   if (!file.exists(path)) {
     bundled <- rclinvarbitration_bundled_duckdb_versions(root)
+    platform_root <- file.path(root, duckdb_version)
+    platforms <- if (dir.exists(platform_root)) {
+      list.dirs(platform_root, recursive = FALSE, full.names = FALSE)
+    } else {
+      character()
+    }
     stop(
       "RClinVarbitration has no artifact for DuckDB ", duckdb_version,
-      ". Bundled versions: ", if (length(bundled)) paste(bundled, collapse = ", ") else "none",
-      ". Install a release that supports this exact engine version.",
+      " on ", duckdb_platform, ". Bundled versions: ",
+      if (length(bundled)) paste(bundled, collapse = ", ") else "none",
+      "; platforms for this version: ",
+      if (length(platforms)) paste(platforms, collapse = ", ") else "none",
+      ". Install a release that supports this exact engine version and platform.",
       call. = FALSE
     )
   }
@@ -76,7 +127,10 @@ rclinvarbitration_extension_path <- function(duckdb_version = NULL) {
 #' @export
 rclinvarbitration_enable <- function(con, extension_path = NULL) {
   version <- rclinvarbitration_connection_version(con)
-  if (is.null(extension_path)) extension_path <- rclinvarbitration_extension_path(version)
+  platform <- rclinvarbitration_connection_platform(con)
+  if (is.null(extension_path)) {
+    extension_path <- rclinvarbitration_extension_path(version, platform)
+  }
   if (!is.character(extension_path) || length(extension_path) != 1L ||
       is.na(extension_path) || !nzchar(extension_path)) {
     stop("`extension_path` must be NULL or a non-empty character scalar.", call. = FALSE)

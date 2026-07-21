@@ -1,0 +1,35 @@
+Audit: March 2026 XML versus flat differential classification
+Audit-Date-UTC: 2026-07-21
+Assembly: GRCh38
+Policy: cpg-clinvarbitration-2.2.11
+XML-Source: ClinVarVCVRelease_2026-03.xml.gz
+XML-Source-SHA256: 8c369922c38958bdba0c99225d2db794cd02995930b98cfce7a4754faf65f7c8
+Submission-Source: submission_summary_2026-03.txt.gz
+Submission-Source-SHA256: dfc875bc831292b857d8d0a85eb57157452e12f04fbc3591addbf59208de727f
+Variant-Source: variant_summary_2026-03.txt.gz
+Variant-Source-SHA256: 0d6c0c8760529befdfc1fbfcfa90cfb0aa11bfc5fe72176ac9bc9820884f710e
+Comparison-Key: contig,position,reference,alternate,allele_id
+XML-Rows: 4125736
+Flat-Rows: 4125389
+Shared-Keys: 4125382
+Shared-Disagreements: 16
+XML-Only-Keys: 354
+Flat-Only-Keys: 7
+Class-Flat-Missing-XML-Current: 369
+Class-Flat-Duplicate-SCV-XML-Identity: 1
+Class-Compound-Child-Location: 2
+Class-Flat-Pathogenic-XML-Affects: 4
+Class-Flat-Benign-XML-No-Known-Pathogenicity: 1
+Classification-Total: 377
+Key-Receipt: march-2026-key-difference-receipts.csv.gz
+Key-Receipt-SHA256: 9efc0cbc409a93c4bf4cdf70f00fc61eee89d41f062b0cb80c012b66390c4091
+Flat-Submission-Receipt: march-2026-flat-submission-receipts.csv.gz
+Flat-Submission-Receipt-Rows: 422
+Flat-Submission-Receipt-SHA256: 3ffaa0a34bdb8bb7b19a47331923b5c19b9046e953e5ff65fca82c46fe8ce01f
+XML-SCV-Receipt: march-2026-xml-scv-receipts.csv.gz
+XML-SCV-Receipt-Rows: 438
+XML-SCV-Receipt-SHA256: 03296afe6263acc1a9b7191355591d5b12b66cf25a3226964e01b7f8f40e3136
+XML-Entity-Receipt: march-2026-target-xml-entity-receipts.parquet
+XML-Entity-Receipt-Rows: 7463
+XML-Entity-Receipt-SHA256: 7ec164e660294b62139c5ad029a175621cce1f28c2d43baa56a6e0e62043201a
+Conclusion: Every one of the 16 shared disagreements and 361 key-set differences is assigned a source-backed class. Most are differences between NCBI's XML and flat projections, not arithmetic disagreement. Two flat-only keys are nested alleles intentionally excluded by the top-level allele compatibility export.

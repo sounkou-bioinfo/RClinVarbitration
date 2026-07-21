@@ -130,11 +130,64 @@ Observed results:
 | Shared-key classification or star disagreements | 16 | 16 |
 | Exact agreement among shared keys | 99.9996% | 99.9996% |
 
-The 16 shared-key differences and 361 non-shared keys remain intentional audit
-items, not silently accepted equivalence. Likely mechanisms to test include XML
-SCV version identity, contribution flags, entity linkage, and differences
-between monthly XML and flat projections. They must be reduced or explicitly
-classified before claiming exact XML/flat parity.
+All 377 differences are now source-row classified:
+
+| Source-backed class | Shared disagreements | XML-only keys | Flat-only keys |
+|:--|--:|--:|--:|
+| Flat `ClinicalSignificance` is `-`; XML carries the current germline classification | 15 | 354 | 0 |
+| Flat repeats one SCV/version with divergent rows; XML has one current assertion identity | 1 | 0 | 0 |
+| XML uses unbinned legacy `Affects`; flat uses `Pathogenic` | 0 | 0 | 4 |
+| XML uses unbinned `no known pathogenicity`; flat uses `Benign` | 0 | 0 | 1 |
+| Flat location is a nested compound/haplotype allele; the XML compatibility export is top-level-allele only | 0 | 0 | 2 |
+| **Total** | **16** | **354** | **7** |
+
+The duplicate case is VariationID 548128: the flat source repeats
+`SCV000783104.86` as `Pathogenic`, `Uncertain significance`, and `not provided`,
+whereas the XML has one current SCV assertion classified `Uncertain
+significance`. The flat algorithm therefore reaches P/LP while XML assertion
+identity produces VUS. The two nested-allele cases are CYP2C19 compound records
+633845 and 633881. Their child locations and AlleleIDs are retained in the XML
+relations, but are deliberately absent from the top-level allele compatibility
+export.
+
+These are not unexplained arithmetic failures. They demonstrate that NCBI's
+same-month XML and flat products are not row-equivalent policy inputs. The
+[377-key receipt](../inst/audits/march-2026-key-difference-receipts.csv.gz)
+contains the variant-summary physical line, flat-submission physical lines, XML
+record/entity ordinals, source values, outputs, and assigned class for every
+key. Detailed
+[flat submission](../inst/audits/march-2026-flat-submission-receipts.csv.gz),
+[XML SCV](../inst/audits/march-2026-xml-scv-receipts.csv.gz), and
+[XML entity](../inst/audits/march-2026-target-xml-entity-receipts.parquet)
+receipts are pinned by the
+[differential manifest](../inst/audits/march-2026-xml-flat-differential.dcf).
+
+### Exact-input execution of pinned upstream 2.2.11
+
+The upstream TSV stage at commit
+`658b9f241eb2d43aa11214b153b19c1e18a16337` was rerun against the exact March
+archive files identified above. The upstream decision module was loaded
+unmodified; inert Hail/loguru stand-ins allowed execution through
+`write_dicts_as_tsv()` and stopped before Hail, VCF, and PM5 post-processing.
+The package's validation-only flat reproducer was then compared on the complete
+seven-column key and values.
+
+| Metric | RClinVarbitration flat path | Pinned upstream execution |
+|:--|--:|--:|
+| Rows | 4,125,389 | 4,125,389 |
+| Shared keys | 4,125,389 | 4,125,389 |
+| Path-only keys | 0 | 0 |
+| Classification or star disagreements | 0 | 0 |
+| Exact agreement | 100% | 100% |
+
+The upstream TSV SHA-256 is
+`35ffe949d488b6d0a79bba3a3295e810f4b79e193ffdb5b4da15faedfe1970ee`.
+The [oracle manifest](../inst/audits/march-2026-flat-exact-oracle.dcf) records
+both input digests, producing commit, algorithm digest, configuration, runtime,
+output byte counts and digests, and comparison result. The executable
+[`tools/run_pinned_upstream_flat_oracle.py`](../tools/run_pinned_upstream_flat_oracle.py)
+repeats the TSV-only run. This is the algorithm-conformance result; the XML
+comparison above is a source-projection differential.
 
 ### Comparison with the published March 2026 upstream artifact
 
@@ -157,40 +210,83 @@ The direct flat reproduction produced:
 | Exact agreement among shared keys | 99.9548% | 99.9548% |
 
 None of the candidate-only keys had an allele ID or locus represented in the
-reference-only set, and vice versa. This strongly indicates a source-snapshot
-difference rather than only coordinate formatting. The Zenodo artifact does
-not bundle the exact NCBI input files or a content digest for them, and its
-March 24 publication could have used mutable current flat files rather than the
-March 5 monthly archive. It also does not pin the producing code commit in the
-artifact metadata. Consequently this result is a useful release-level
-comparison, but **not** an exact-input algorithm-conformance test. The 1,863
-differences must not be attributed solely to either implementation.
+reference-only set, and vice versa. This indicates a source-snapshot difference
+rather than coordinate formatting. The Zenodo artifact does not bundle the
+exact NCBI inputs or their content digests, and its March 24 publication could
+have used mutable current flat files rather than the March 5 archive. It also
+does not pin the producing commit in its artifact metadata.
+
+The exact-input rerun above now resolves the concern raised by the 16,865
+reference-only keys: with identical archived inputs, the package and pinned
+upstream code have zero key or value differences. The Zenodo result remains a
+release-snapshot comparison and must not be used as an algorithm-conformance
+failure count.
+
+## Measured XML structure coverage
+
+A second complete pass counted source elements in the same March XML and
+compared them with import counts. The counter is
+[`tools/audit_xml_structure_coverage.c`](../tools/audit_xml_structure_coverage.c);
+the [element receipt](../inst/audits/march-2026-xml-structure-counts.tsv) and
+[coverage manifest](../inst/audits/march-2026-xml-structure-coverage.dcf) pin the
+source and counter digests.
+
+| XML structure | Source elements | Typed representation |
+|:--|--:|:--|
+| `VariationArchive` | 4,478,872 | 4,478,872 `clinvar_variants` rows (100%) |
+| `ClinicalAssertion` | 6,813,140 | 6,813,140 `clinvar_scv_assertions` rows (100%) |
+| `ObservedIn` | 6,869,122 | 6,869,122 `clinvar_observations` rows (100%) |
+| `Sample` | 6,869,122 | no sample relation; selected fields flattened into observations |
+| `Method` / `MethodType` | 6,877,237 / 6,877,237 | no method relation; one scalar `method_type` per observation row |
+| `ObservedData` / child `Attribute` | 6,494,488 / 6,494,488 | attributes retained in generic `clinvar_attributes`; no observed-data relation |
+| `MolecularConsequence` | 24,908,913 | no dedicated typed relation |
+| `FunctionalConsequence` | 564,026 | no dedicated typed relation |
+
+The flattened sample fields cover all 6,869,122 `Origin`, `Species`, and
+`AffectedStatus` children and 123,764 `NumberTested` children. The source also
+contains sample details with no typed column: 73,583 `Age`, 135,617 `Sex`,
+48,536 `Ethnicity`, 26,335 `GeographicOrigin`, 547,099 `Tissue`, and 47,233
+`FamilyData` elements. Methods additionally contain 182,688 `TypePlatform` and
+52,989 `MethodAttribute` elements without typed columns. Since there are 8,115
+more methods than observations, the scalar method projection also cannot
+represent method multiplicity. Of the molecular-consequence structures, 433
+nested XRefs survive as allele XRefs, but their consequence-node association is
+not retained.
+
+This quantifies the selected-projection boundary; it does not rebrand generic
+attribute retention as complete typed coverage.
 
 ## Executable branch coverage
 
 Tinytests exercise classification bins, unknown exclusion, qualified and
 profile exclusions, SCV deduplication, old-versus-modern evidence, strong-review
 source order, 60/20 decisions, VUS handling, stars, disease grouping,
-allele-level output, and XML fixture import. Full-release differentials remain
-necessary because branch fixtures do not test NCBI source coverage.
+allele-level output, and XML fixture import. Release-differential fixtures now
+cover stable public disease keys despite changed labels/entities, highest SCV
+version replacement, disappearance of a withdrawn assertion, compound child
+alleles, and GRCh38 `MT` to `chrM` export.
 
-## Open limitations and audit actions
+Projection checks use real source contexts. VCV000158424/SCV000192942 pins HPO
+`HP:0002282` to assertion condition 2 from the complete 2026-07-02 release.
+VCV000091629/SCV000827729 pins PMID 21735045 to assertion 1599586 and its PubMed
+URL. The [fixture manifest](../inst/audits/curated-projection-fixtures.dcf)
+records those expectations. These tests validate linkage only; neither a term
+nor a citation is treated as clinically relevant merely because it exists.
 
-1. Classify all 16 same-month XML/flat shared-key differences and 361 key-set
-   differences with source-row receipts.
-2. Obtain or create an upstream artifact that includes exact input digests,
-   producing commit, configuration, and output digest; rerun the flat oracle.
-3. Add release-to-release differential fixtures for disease-key stability,
-   SCV version replacement, withdrawn records, compound alleles, and
-   mitochondrial locations.
-4. Quantify source coverage for sample/method/functional XML structures not yet
-   represented by dedicated typed relations.
-5. Validate HPO-context and citation-link projections against curated records;
-   do not infer clinical relevance from link existence.
-6. Keep semantic retrieval, dynamic panels, VUS prioritization, and VariantStory
+## Remaining limitations and audit actions
+
+1. Run real consecutive full releases in addition to the new synthetic
+   release-differential fixtures, especially for disease-key fallback changes
+   and withdrawn/merged accessions.
+2. Decide whether sample, method, observed-data, and molecular/functional
+   consequence structures measured above warrant new typed relations; until
+   then, expose their quantified loss rather than implying lossless import.
+3. Repeat the exact-input upstream oracle for future policy or parser changes;
+   do not substitute a mutable or digest-free published artifact.
+4. Keep semantic retrieval, dynamic panels, VUS prioritization, and VariantStory
    evidence admission as separately evaluated layers. Embedding quality is not
    arbitration correctness.
-7. PM5, VEP consequence generation, and clinical validation remain out of scope.
+5. PM5, VEP consequence generation, and clinical validation remain out of scope.
 
 Update this document whenever parser coverage, arbitration semantics, grouping,
 or a differential result changes. Render with:

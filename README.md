@@ -43,7 +43,6 @@ library(duckdb)
 library(RClinVarbitration)
 
 con <- dbConnect(duckdb(config = list(allow_unsigned_extensions = "true")))
-on.exit(dbDisconnect(con, shutdown = TRUE))
 
 rclinvarbitration_enable(con)
 rclinvarbitration_init(con)
@@ -53,13 +52,18 @@ xml <- system.file(
   "extdata", "VCV_XML_VCV000091629.xml.gz",
   package = "RClinVarbitration"
 )
-rclinvarbitration_import_xml(con, xml, release_id = "clinvar-example")
+imported <- rclinvarbitration_import_xml(
+  con, xml, release_id = "clinvar-example"
+)
 
 dbGetQuery(con, "
   SELECT vcv_accession, variation_id, aggregate_classification
   FROM clinvar_variants
 ")
 ```
+
+    ##   vcv_accession variation_id     aggregate_classification
+    ## 1  VCV000091629        91629 Pathogenic/Likely pathogenic
 
 For a complete current or archived release, use the checksum-validating
 download cache and a file-backed database:
@@ -158,10 +162,23 @@ because its source and grouping differ.
 
 The archived-flat-file reproducer is retained only as a
 differential-validation utility; it is redundant for ordinary XML
-imports. The [ERRATA
+imports. An exact-input execution of the pinned upstream Python TSV
+stage and this package’s flat reproducer over the complete March 2026
+archives produced the same 4,125,389 keys with zero classification or
+star differences. Input, code, configuration, and output digests are in
+the [oracle
+manifest](https://github.com/sounkou-bioinfo/RClinVarbitration/blob/main/inst/audits/march-2026-flat-exact-oracle.dcf).
+
+The independently matched XML/flat audit classified every one of the 16
+shared value differences and 361 key-set differences with source-row
+receipts. Most come from NCBI flat rows whose classification is `-`
+while XML carries a current classification; the remainder are one
+duplicate-SCV identity case, five source vocabulary differences, and two
+nested compound alleles. The [ERRATA
 audit](https://github.com/sounkou-bioinfo/RClinVarbitration/blob/main/docs/ERRATA.md)
-reports a matched March 2026 XML/flat comparison and a separate
-comparison with the published upstream artifact.
+contains the full counts and receipts. A published Zenodo release with
+16,865 reference-only keys used an unpinned source snapshot; it is not
+the exact-input conformance result.
 
 One deliberate edge-case difference is that RClinVarbitration applies
 the qualified Illumina benign exclusion declared by upstream. At the
