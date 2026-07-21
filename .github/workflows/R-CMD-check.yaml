@@ -60,7 +60,7 @@ jobs:
             any::rmarkdown,
             any::roxygen2,
             any::tinytest,
-            github::duckdb/duckdb-r@v${{ matrix.duckdb }},
+            any::duckdb,
             local::.
           needs: check
           dependencies: '"hard"'
