@@ -59,16 +59,19 @@ XML_LIBS=`pkg-config --libs libxml-2.0`
 OS=`uname -s`
 ARCH=`uname -m`
 case "$OS/$ARCH" in
-  Linux/x86_64) PLATFORM=linux_amd64; SHARED_FLAGS='-shared -fPIC -Wl,--exclude-libs,ALL -Wl,-Bsymbolic-functions' ;;
-  Linux/aarch64|Linux/arm64) PLATFORM=linux_arm64; SHARED_FLAGS='-shared -fPIC -Wl,--exclude-libs,ALL -Wl,-Bsymbolic-functions' ;;
-  Darwin/x86_64) PLATFORM=osx_amd64; SHARED_FLAGS='-shared -fPIC -undefined dynamic_lookup -Wl,-exported_symbol,_rclinvarbitration_init_c_api' ;;
-  Darwin/arm64) PLATFORM=osx_arm64; SHARED_FLAGS='-shared -fPIC -undefined dynamic_lookup -Wl,-exported_symbol,_rclinvarbitration_init_c_api' ;;
+  Linux/x86_64) PLATFORM=linux_amd64; SHARED_FLAGS='-shared -fPIC -Wl,--exclude-libs,ALL -Wl,-Bsymbolic-functions'; EXTRA_CFLAGS='' ;;
+  Linux/aarch64|Linux/arm64) PLATFORM=linux_arm64; SHARED_FLAGS='-shared -fPIC -Wl,--exclude-libs,ALL -Wl,-Bsymbolic-functions'; EXTRA_CFLAGS='' ;;
+  # DuckDB's exact v1.5 headers retain legacy empty-prototype declarations.
+  # Keep -Werror for package code while preventing current Apple Clang from
+  # rejecting that vendored-header-only diagnostic.
+  Darwin/x86_64) PLATFORM=osx_amd64; SHARED_FLAGS='-shared -fPIC -undefined dynamic_lookup -Wl,-exported_symbol,_rclinvarbitration_init_c_api'; EXTRA_CFLAGS='-Wno-error=strict-prototypes' ;;
+  Darwin/arm64) PLATFORM=osx_arm64; SHARED_FLAGS='-shared -fPIC -undefined dynamic_lookup -Wl,-exported_symbol,_rclinvarbitration_init_c_api'; EXTRA_CFLAGS='-Wno-error=strict-prototypes' ;;
   *) echo "ERROR: unsupported DuckDB extension platform: $OS/$ARCH" >&2; exit 1 ;;
 esac
 
 rm -rf "$BUILD_ROOT"
 mkdir -p "$BUILD_ROOT"
-CFLAGS="$R_CFLAGS $R_CPICFLAGS -O2 -fPIC -fvisibility=hidden -Wall -Wextra -Werror"
+CFLAGS="$R_CFLAGS $R_CPICFLAGS -O2 -fPIC -fvisibility=hidden -Wall -Wextra -Werror $EXTRA_CFLAGS"
 
 for DUCKDB_VERSION in $BUILD_VERSIONS; do
   HEADER_DIR="$CAPI_ROOT/$DUCKDB_VERSION"
