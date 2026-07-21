@@ -1,0 +1,24 @@
+release_id: ncbi-vcv-2026-07-02
+source_md5: 2e7e76ebbf668910b8688cc5e4284c1b
+policy_version: cpg-clinvarbitration-2.2.11
+duckdb_version: 1.5.3
+threads: 4
+memory_limit: 4GB
+cpu: 13th Gen Intel(R) Core(TM) i5-13500
+os: Ubuntu 24.04 x86_64
+hpo_link_rows: 24178
+hpo_distinct_terms: 2628
+hpo_distinct_variants: 12472
+hpo_query_elapsed_seconds: 0.128
+literature_link_rows: 8252297
+literature_linked_rows: 8248371
+literature_distinct_variants: 4430949
+literature_query_elapsed_seconds: 1.338
+semantic_document_rows: 30649367
+semantic_comment_rows: 4213102
+semantic_description_rows: 5937873
+semantic_document_query_elapsed_seconds: 2.456
+gene_summary_rows: 92789
+gene_summary_query_elapsed_seconds: 20.73
+gene_summary_materialization_elapsed_seconds: 23.222
+materialized_brca1_lookup_elapsed_seconds: 0.003

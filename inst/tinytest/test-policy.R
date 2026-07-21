@@ -16,11 +16,15 @@ DBI::dbExecute(con, "INSERT INTO clinvar_variants (release_id, record_ordinal, v
 DBI::dbExecute(con, "INSERT INTO clinvar_alleles (release_id, record_ordinal, vcv_accession, allele_entity_id, allele_id) VALUES ('xref', 1, 'VCVX', 'allele-x', 1)")
 DBI::dbExecute(con, "INSERT INTO clinvar_scv_assertions (release_id, record_ordinal, vcv_accession, assertion_entity_id) VALUES ('xref', 1, 'VCVX', 'assertion-x')")
 DBI::dbExecute(con, "INSERT INTO clinvar_conditions (release_id, record_ordinal, vcv_accession, scv_entity_id, condition_id, context_type, context_id, preferred_name) VALUES ('xref', 1, 'VCVX', 'assertion-x', 'condition-x', 'scv_assertion', 'assertion-x', 'Disease X')")
-DBI::dbExecute(con, "INSERT INTO clinvar_xrefs (release_id, record_ordinal, vcv_accession, scv_entity_id, context_type, context_id, xref_id, database_name, database_id) VALUES ('xref', 1, 'VCVX', 'assertion-x', 'condition', 'condition-x', 'xref-hp', 'HP', 'HP:1'), ('xref', 1, 'VCVX', 'assertion-x', 'condition', 'condition-x', 'xref-omim', 'OMIM', '123')")
+DBI::dbExecute(con, "INSERT INTO clinvar_xrefs (release_id, record_ordinal, vcv_accession, scv_entity_id, context_type, context_id, xref_id, database_name, database_id) VALUES ('xref', 1, 'VCVX', 'assertion-x', 'condition', 'condition-x', 'xref-hp', 'HP', 'HP:0000001'), ('xref', 1, 'VCVX', 'assertion-x', 'condition', 'condition-x', 'xref-omim', 'OMIM', '123')")
 canonical <- DBI::dbGetQuery(con, "SELECT disease_database, disease_identifier, disease_key FROM clinvar_disease_submissions")
 expect_equal(canonical$disease_database, "OMIM")
 expect_equal(canonical$disease_identifier, "123")
 expect_equal(canonical$disease_key, "omim:123")
+expect_equal(
+  DBI::dbGetQuery(con, "SELECT hpo_id FROM clinvar_hpo_terms")$hpo_id,
+  "HP:0000001"
+)
 
 DBI::dbExecute(con, "DROP VIEW clinvar_policy_pathogenic_alleles")
 DBI::dbExecute(con, "DROP VIEW clinvar_policy_decisions")

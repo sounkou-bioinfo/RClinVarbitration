@@ -14,9 +14,13 @@ rclinvarbitration_schema_sql <- function() {
   c(
     releases = paste(
       "CREATE TABLE IF NOT EXISTS clinvar_releases (",
-      "release_id TEXT PRIMARY KEY, source_path TEXT NOT NULL,",
+      "release_id TEXT PRIMARY KEY, source_path TEXT NOT NULL, source_url TEXT,",
+      "source_md5 TEXT, source_bytes UBIGINT,",
       "imported_at TIMESTAMP NOT NULL DEFAULT current_timestamp)"
     ),
+    release_source_url = "ALTER TABLE clinvar_releases ADD COLUMN IF NOT EXISTS source_url TEXT",
+    release_source_md5 = "ALTER TABLE clinvar_releases ADD COLUMN IF NOT EXISTS source_md5 TEXT",
+    release_source_bytes = "ALTER TABLE clinvar_releases ADD COLUMN IF NOT EXISTS source_bytes UBIGINT",
     variants = paste(
       "CREATE TABLE IF NOT EXISTS clinvar_variants (",
       "release_id TEXT NOT NULL, record_ordinal UBIGINT NOT NULL,",
@@ -206,7 +210,82 @@ rclinvarbitration_schema_sql <- function() {
       "WHEN disease_name IS NOT NULL THEN 'name:' || lower(trim(disease_name))",
       "ELSE 'condition:' || condition_id END AS disease_key FROM linked"
     ),
-    rclinvarbitration_policy_sql()
+    hpo_terms = paste(
+      "CREATE OR REPLACE VIEW clinvar_hpo_terms AS WITH normalized AS (SELECT",
+      "release_id, record_ordinal, vcv_accession, rcv_entity_id, scv_entity_id,",
+      "context_type, context_id, xref_id, xref_type,",
+      "upper(trim(database_id)) AS raw_hpo_id FROM clinvar_xrefs",
+      "WHERE lower(trim(coalesce(database_name, ''))) IN",
+      "('hp', 'hpo', 'human phenotype ontology'))",
+      "SELECT release_id, record_ordinal, vcv_accession, rcv_entity_id, scv_entity_id,",
+      "context_type, context_id, xref_id,",
+      "CASE WHEN starts_with(raw_hpo_id, 'HP:') THEN raw_hpo_id",
+      "ELSE 'HP:' || raw_hpo_id END AS hpo_id, xref_type FROM normalized",
+      "WHERE regexp_matches(raw_hpo_id, '^(HP:)?[0-9]{7}$')"
+    ),
+    literature_links = paste(
+      "CREATE OR REPLACE VIEW clinvar_literature_links AS SELECT",
+      "c.release_id, c.record_ordinal, c.vcv_accession, c.rcv_entity_id, c.scv_entity_id,",
+      "c.citation_id, c.context_type, c.context_id, c.citation_type, c.abbreviation,",
+      "i.identifier_entity_id, i.source, i.identifier,",
+      "coalesce(nullif(trim(c.url), ''), CASE",
+      "WHEN lower(trim(i.source)) IN ('pubmed', 'pmid')",
+      "THEN 'https://pubmed.ncbi.nlm.nih.gov/' || trim(i.identifier) || '/'",
+      "WHEN lower(trim(i.source)) = 'doi'",
+      "THEN 'https://doi.org/' || trim(i.identifier)",
+      "WHEN lower(trim(i.source)) = 'pmc'",
+      "THEN 'https://www.ncbi.nlm.nih.gov/pmc/articles/' || trim(i.identifier) || '/'",
+      "WHEN lower(trim(i.source)) = 'bookshelf'",
+      "THEN 'https://www.ncbi.nlm.nih.gov/books/' || trim(i.identifier) || '/'",
+      "END) AS literature_url FROM clinvar_citations c",
+      "LEFT JOIN clinvar_citation_identifiers i ON i.release_id = c.release_id",
+      "AND i.citation_id = c.citation_id AND i.vcv_accession = c.vcv_accession"
+    ),
+    semantic_documents = paste(
+      "CREATE OR REPLACE VIEW clinvar_semantic_documents AS WITH genes AS (SELECT",
+      "release_id, vcv_accession,",
+      "list(DISTINCT gene_id ORDER BY gene_id) FILTER (WHERE gene_id IS NOT NULL) AS gene_ids,",
+      "list(DISTINCT symbol ORDER BY symbol) FILTER (WHERE symbol IS NOT NULL) AS gene_symbols",
+      "FROM clinvar_genes GROUP BY release_id, vcv_accession)",
+      "SELECT concat_ws(':', t.release_id, t.vcv_accession, t.document_id,",
+      "cast(t.record_ordinal AS VARCHAR), cast(t.ordinal AS VARCHAR)) AS semantic_document_id,",
+      "t.release_id, t.vcv_accession, t.rcv_entity_id, t.scv_entity_id,",
+      "t.context_type, t.context_id, t.section, t.text, g.gene_ids, g.gene_symbols,",
+      "s.scv_accession, s.submitter_name, s.classification AS submitted_classification,",
+      "s.review_status AS submitted_review_status, s.date_last_evaluated",
+      "FROM clinvar_text t LEFT JOIN genes g USING (release_id, vcv_accession)",
+      "LEFT JOIN clinvar_scv_assertions s ON s.release_id = t.release_id",
+      "AND s.assertion_entity_id = t.scv_entity_id"
+    ),
+    rclinvarbitration_policy_sql(),
+    gene_summaries = paste(
+      "CREATE OR REPLACE VIEW clinvar_gene_summaries AS WITH gene_decisions AS (SELECT DISTINCT",
+      "d.policy_version, d.profile_id, d.release_id, d.vcv_accession, d.allele_id,",
+      "d.disease_key, d.policy_classification, d.gold_stars, d.latest_date_last_evaluated,",
+      "coalesce('ncbigene:' || cast(g.gene_id AS VARCHAR),",
+      "'hgnc:' || g.hgnc_id, 'symbol:' || upper(g.symbol)) AS gene_key,",
+      "g.gene_id, g.symbol, g.hgnc_id, g.full_name FROM clinvar_genes g",
+      "JOIN clinvar_alleles a ON a.release_id = g.release_id",
+      "AND a.allele_entity_id = g.allele_entity_id",
+      "JOIN clinvar_policy_decisions d ON d.release_id = a.release_id",
+      "AND d.vcv_accession = a.vcv_accession AND d.allele_id = a.allele_id",
+      "WHERE g.gene_id IS NOT NULL OR g.hgnc_id IS NOT NULL OR g.symbol IS NOT NULL)",
+      "SELECT policy_version, profile_id, release_id, gene_key, max(gene_id) AS gene_id,",
+      "max(symbol) AS symbol, max(hgnc_id) AS hgnc_id, max(full_name) AS full_name,",
+      "count(*) AS disease_decision_count, count(DISTINCT disease_key) AS disease_count,",
+      "count(DISTINCT vcv_accession) AS variant_count,",
+      "count(DISTINCT allele_id) AS allele_count,",
+      "count(*) FILTER (WHERE policy_classification = 'Pathogenic/Likely Pathogenic')",
+      "AS pathogenic_disease_decision_count,",
+      "count(DISTINCT allele_id) FILTER",
+      "(WHERE policy_classification = 'Pathogenic/Likely Pathogenic') AS pathogenic_allele_count,",
+      "count(*) FILTER (WHERE policy_classification = 'Benign') AS benign_disease_decision_count,",
+      "count(*) FILTER (WHERE policy_classification = 'VUS') AS vus_disease_decision_count,",
+      "count(*) FILTER (WHERE policy_classification = 'Conflicting')",
+      "AS conflicting_disease_decision_count, max(gold_stars) AS maximum_gold_stars,",
+      "max(latest_date_last_evaluated) AS latest_date_last_evaluated",
+      "FROM gene_decisions GROUP BY policy_version, profile_id, release_id, gene_key"
+    )
   )
 }
 
@@ -403,11 +482,34 @@ rclinvarbitration_import_statements <- function(release_sql) {
 #' @param path Path to an official ClinVar VCV XML or XML.GZ release.
 #' @param release_id User-supplied release label stored with every row.
 #' @param replace Replace rows already stored for `release_id`?
+#' @param source_url Optional source URL for the release catalogue. When `path`
+#'   is returned directly by [rclinvarbitration_download_clinvar()], its download
+#'   metadata supplies this value automatically.
+#' @param source_md5 Optional 32-character source MD5 digest. Download metadata
+#'   is used automatically when available.
 #' @return A named numeric vector with imported entity counts.
 #' @export
-rclinvarbitration_import_xml <- function(con, path, release_id, replace = FALSE) {
+rclinvarbitration_import_xml <- function(
+    con, path, release_id, replace = FALSE,
+    source_url = NULL, source_md5 = NULL) {
+  download <- attr(path, "download", exact = TRUE)
   if (!is.character(path) || length(path) != 1L || is.na(path) || !file.exists(path)) {
     stop("`path` must name an existing ClinVar XML or XML.GZ file.", call. = FALSE)
+  }
+  if (is.data.frame(download) && nrow(download) == 1L &&
+      all(c("url", "md5") %in% names(download))) {
+    if (is.null(source_url)) source_url <- download$url[[1L]]
+    if (is.null(source_md5) && !is.na(download$md5[[1L]])) source_md5 <- download$md5[[1L]]
+  }
+  validate_optional_text <- function(value, name) {
+    if (!is.null(value) && (!is.character(value) || length(value) != 1L || is.na(value) || !nzchar(value))) {
+      stop("`", name, "` must be NULL or a non-empty character scalar.", call. = FALSE)
+    }
+  }
+  validate_optional_text(source_url, "source_url")
+  validate_optional_text(source_md5, "source_md5")
+  if (!is.null(source_md5) && !grepl("^[[:xdigit:]]{32}$", source_md5)) {
+    stop("`source_md5` must be a 32-character hexadecimal MD5 digest.", call. = FALSE)
   }
   if (!is.character(release_id) || length(release_id) != 1L || is.na(release_id) || !nzchar(release_id)) {
     stop("`release_id` must be a non-empty character scalar.", call. = FALSE)
@@ -417,8 +519,11 @@ rclinvarbitration_import_xml <- function(con, path, release_id, replace = FALSE)
   }
   rclinvarbitration_init(con)
   release_sql <- rclinvarbitration_sql_string(release_id)
+  source_bytes <- unname(file.info(path)$size)
   source_path <- normalizePath(path, mustWork = TRUE)
   path_sql <- rclinvarbitration_sql_string(source_path)
+  source_url_sql <- if (is.null(source_url)) "NULL" else rclinvarbitration_sql_string(source_url)
+  source_md5_sql <- if (is.null(source_md5)) "NULL" else rclinvarbitration_sql_string(tolower(source_md5))
   existing <- DBI::dbGetQuery(
     con,
     paste0("SELECT count(*) AS n FROM clinvar_releases WHERE release_id = ", release_sql)
@@ -472,7 +577,12 @@ rclinvarbitration_import_xml <- function(con, path, release_id, replace = FALSE)
   for (statement in rclinvarbitration_import_statements(release_sql)) DBI::dbExecute(con, statement)
   DBI::dbExecute(
     con,
-    paste0("INSERT INTO clinvar_releases (release_id, source_path) VALUES (", release_sql, ", ", path_sql, ")")
+    paste0(
+      "INSERT INTO clinvar_releases ",
+      "(release_id, source_path, source_url, source_md5, source_bytes) VALUES (",
+      release_sql, ", ", path_sql, ", ", source_url_sql, ", ", source_md5_sql,
+      ", ", sprintf("%.0f", source_bytes), ")"
+    )
   )
   import_complete <- TRUE
   DBI::dbExecute(con, paste("DROP TABLE", staging_table))

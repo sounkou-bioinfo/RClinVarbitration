@@ -1,0 +1,208 @@
+RClinVarbitration deviations and differential audit
+================
+
+<!-- ERRATA.md is generated from ERRATA.Rmd. Edit the Rmd source. -->
+
+# Purpose
+
+This document records where RClinVarbitration intentionally or
+unavoidably differs from:
+
+1.  Centre for Population Genomics (CPG) ClinVarbitration 2.2.11 at
+    commit `658b9f241eb2d43aa11214b153b19c1e18a16337`; and
+2.  NCBI ClinVar’s source records and official aggregate
+    classifications.
+
+It also reports observed differential results. A difference is not
+called a bug unless source release, code version, policy, grouping,
+coordinate rules, and output key are aligned. RClinVarbitration outputs
+are alternative derived observations and are not official ClinVar
+classifications.
+
+## Deviations from upstream ClinVarbitration
+
+| Area                         | Upstream 2.2.11                                                               | RClinVarbitration                                                                          | Status and consequence                                                                                |
+|:-----------------------------|:------------------------------------------------------------------------------|:-------------------------------------------------------------------------------------------|:------------------------------------------------------------------------------------------------------|
+| Normal input                 | NCBI `submission_summary` plus `variant_summary`                              | complete VCV XML/XML.GZ                                                                    | Intentional. XML retains richer attributable evidence but has different entity and release semantics. |
+| Runtime                      | Python, Pandas, Hail, Spark, Nextflow, bcftools                               | R, DuckDB SQL, package-owned C extension                                                   | Intentional implementation change; semantic parity is tested separately from performance.             |
+| Decision scope               | allele/VariationID                                                            | disease plus allele views                                                                  | Intentional extension. Disease grouping can produce multiple decisions for one allele.                |
+| SCV versions                 | flat rows; no XML assertion identity step                                     | highest SCV version per assertion identity and decision group                              | Intentional XML adaptation; can change counts where versioned rows are exposed.                       |
+| Qualified Illumina exclusion | declared, but the pinned Python inner-loop `continue` does not remove the row | removes benign evidence from normalized submitter `illumina laboratory services; illumina` | Intentional correction to documented policy, not bug-for-bug compatibility.                           |
+| Submitter exclusion matching | lower-cased flat submitter names and CLI/config values                        | trimmed, case-insensitive names; profile-wide or classification-qualified rules            | Intentional extension. Imported evidence remains present.                                             |
+| Disease identity             | absent from the decision key                                                  | canonical identifier, trait-set, name, then package entity fallback                        | Intentional extension with known grouping heuristics; see open limitations.                           |
+| Outputs                      | TSV, Hail Table, VCF, PM5 relation                                            | typed DuckDB tables/views and Parquet decision export                                      | Intentional. Hail, VCF rendering, VEP, and PM5 generation are out of scope.                           |
+| Star and 60/20 rules         | pinned Python implementation                                                  | equivalent SQL rules                                                                       | Expected parity when input rows, order, grouping, and exclusions are identical.                       |
+| Strong-review choice         | first strong row encountered                                                  | `min_by` classification in retained source order                                           | Expected parity. It does not impose practice-guideline priority over an earlier expert-panel row.     |
+
+The validation-only
+`rclinvarbitration_reproduce_clinvarbitration_parquet()` path reads the
+same flat-file shape as upstream. It is intentionally separate from the
+normal XML workflow and should not be used merely to recreate data
+already imported from XML.
+
+## Deviations from ClinVar
+
+### Alternative aggregation
+
+NCBI ClinVar applies its own aggregate germline classification and
+review-status rules. RClinVarbitration instead applies the pinned 2016
+evidence window, classification bins, exclusions, strong-review
+source-order rule, 60/20 rule, and reduced star calculation. Therefore:
+
+- `clinvar_variants.aggregate_classification` and
+  `clinvar_rcv_assertions.classification` are source values;
+- `clinvar_policy_decisions.policy_classification` is a package-derived
+  value;
+- disagreement between them is expected and must remain inspectable; and
+- the derived value must not be labelled as NCBI’s ClinVar
+  classification.
+
+### Selected relational projection, not lossless XML
+
+The importer retains VCV records, alleles, assembly locations, genes,
+RCVs, SCVs, conditions and names, cross-references, observations,
+citations, attributes, and selected attributable text. It deliberately
+does not persist:
+
+- an XML DOM or generic parser-node graph;
+- every XML element and attribute;
+- original whitespace, element ordering outside retained source
+  ordinals, or a byte-reconstructable XML representation; or
+- all sample, method, functional, and historical structures as dedicated
+  typed columns.
+
+`clinvar_text` additionally projects condition names and string-valued
+attributes for discovery. Those rows are attributable normalized
+projections, not original XML serialization.
+
+### Package-generated entity identifiers
+
+Where an XML element does not provide a stable public identifier, the
+parser constructs a scoped entity ID from its VCV/assertion context and
+source ordinal. These keys support joins inside one imported release.
+They must not be presented as NCBI accessions or assumed stable across a
+changed parser policy. Public VCV, RCV, SCV, Variation, Allele, Gene,
+and external condition IDs remain separate typed columns.
+
+### Disease-key heuristic
+
+Disease grouping prefers an explicit condition database/identifier.
+Canonical cross-reference preference is MedGen, MONDO, OMIM, Orphanet,
+MeSH, UMLS, then OMIM phenotypic series. Fallbacks use ClinVar trait-set
+ID, normalized name, and finally the package condition entity.
+
+This can split synonymous conditions whose cross-references differ or
+collapse same-named conditions that lack identifiers. Disease decisions
+therefore need identifier-level review before clinical use.
+
+### HPO, text, and literature views
+
+`clinvar_hpo_terms`, `clinvar_semantic_documents`, and
+`clinvar_literature_links` normalize discovery surfaces. Their presence
+does not assert that an HPO term describes the proband under review,
+that a text row supports the submitted classification, or that a cited
+publication contains admissible evidence. Context IDs and source
+spans/rows must be retained through any downstream claim and review
+process.
+
+## Differential audit
+
+### Matched March 2026 XML and archived flat files
+
+The strongest current differential uses the NCBI March 2026 monthly VCV
+XML and the March 2026 archived `submission_summary`/`variant_summary`
+files. Both RClinVarbitration paths used policy
+`cpg-clinvarbitration-2.2.11`, GRCh38, and the seven-column key
+`(contig, position, reference, alternate, allele_id)`.
+
+Source SHA-256 digests:
+
+| Source                              | SHA-256                                                            |
+|:------------------------------------|:-------------------------------------------------------------------|
+| `ClinVarVCVRelease_2026-03.xml.gz`  | `8c369922c38958bdba0c99225d2db794cd02995930b98cfce7a4754faf65f7c8` |
+| `submission_summary_2026-03.txt.gz` | `dfc875bc831292b857d8d0a85eb57157452e12f04fbc3591addbf59208de727f` |
+| `variant_summary_2026-03.txt.gz`    | `0d6c0c8760529befdfc1fbfcfa90cfb0aa11bfc5fe72176ac9bc9820884f710e` |
+
+Observed results:
+
+| Metric                                          |  XML path | Flat reproduction |
+|:------------------------------------------------|----------:|------------------:|
+| Rows                                            | 4,125,736 |         4,125,389 |
+| Shared keys                                     | 4,125,382 |         4,125,382 |
+| Path-only keys                                  |       354 |                 7 |
+| Shared-key classification or star disagreements |        16 |                16 |
+| Exact agreement among shared keys               |  99.9996% |          99.9996% |
+
+The 16 shared-key differences and 361 non-shared keys remain intentional
+audit items, not silently accepted equivalence. Likely mechanisms to
+test include XML SCV version identity, contribution flags, entity
+linkage, and differences between monthly XML and flat projections. They
+must be reduced or explicitly classified before claiming exact XML/flat
+parity.
+
+### Comparison with the published March 2026 upstream artifact
+
+The published upstream reference was [Zenodo
+19196770](https://doi.org/10.5281/zenodo.19196770), file
+`clinvarbitration_26-03.release.tar.gz` (SHA-256
+`f7a2c7695d73b5c2d88350a38faa5122f1499a2dae27b5ed28bcf4a6a8b7c69b`). The
+direct flat reproduction produced:
+
+| Metric                                | RClinVarbitration flat path | Upstream TSV |
+|:--------------------------------------|----------------------------:|-------------:|
+| Rows                                  |                   4,125,389 |    4,135,355 |
+| Shared keys                           |                   4,118,490 |    4,118,490 |
+| Candidate-only keys                   |                       6,899 |            — |
+| Reference-only keys                   |                           — |       16,865 |
+| Shared-key disagreements              |                       1,863 |        1,863 |
+| Classification mismatches             |                       1,295 |        1,295 |
+| Star mismatches                       |                       1,149 |        1,149 |
+| Both classification and star mismatch |                         581 |          581 |
+| Exact agreement among shared keys     |                    99.9548% |     99.9548% |
+
+None of the candidate-only keys had an allele ID or locus represented in
+the reference-only set, and vice versa. This strongly indicates a
+source-snapshot difference rather than only coordinate formatting. The
+Zenodo artifact does not bundle the exact NCBI input files or a content
+digest for them, and its March 24 publication could have used mutable
+current flat files rather than the March 5 monthly archive. It also does
+not pin the producing code commit in the artifact metadata. Consequently
+this result is a useful release-level comparison, but **not** an
+exact-input algorithm-conformance test. The 1,863 differences must not
+be attributed solely to either implementation.
+
+## Executable branch coverage
+
+Tinytests exercise classification bins, unknown exclusion, qualified and
+profile exclusions, SCV deduplication, old-versus-modern evidence,
+strong-review source order, 60/20 decisions, VUS handling, stars,
+disease grouping, allele-level output, and XML fixture import.
+Full-release differentials remain necessary because branch fixtures do
+not test NCBI source coverage.
+
+## Open limitations and audit actions
+
+1.  Classify all 16 same-month XML/flat shared-key differences and 361
+    key-set differences with source-row receipts.
+2.  Obtain or create an upstream artifact that includes exact input
+    digests, producing commit, configuration, and output digest; rerun
+    the flat oracle.
+3.  Add release-to-release differential fixtures for disease-key
+    stability, SCV version replacement, withdrawn records, compound
+    alleles, and mitochondrial locations.
+4.  Quantify source coverage for sample/method/functional XML structures
+    not yet represented by dedicated typed relations.
+5.  Validate HPO-context and citation-link projections against curated
+    records; do not infer clinical relevance from link existence.
+6.  Keep semantic retrieval, dynamic panels, VUS prioritization, and
+    VariantStory evidence admission as separately evaluated layers.
+    Embedding quality is not arbitration correctness.
+7.  PM5, VEP consequence generation, and clinical validation remain out
+    of scope.
+
+Update this document whenever parser coverage, arbitration semantics,
+grouping, or a differential result changes. Render with:
+
+``` sh
+Rscript -e 'rmarkdown::render("docs/ERRATA.Rmd", output_format = "github_document", quiet = TRUE)'
+```

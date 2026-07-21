@@ -53,7 +53,20 @@ DBI::dbExecute(con, "
   INSERT INTO clinvar_variants (release_id, record_ordinal, vcv_accession)
   VALUES ('fixture-vcv', 999, 'STALE')
 ")
-counts <- rclinvarbitration_import_xml(con, fixture, release_id = "fixture-vcv")
+fixture_download <- structure(
+  fixture,
+  download = data.frame(
+    url = "https://example.test/fixture.xml.gz",
+    md5 = "0123456789abcdef0123456789abcdef"
+  )
+)
+counts <- rclinvarbitration_import_xml(
+  con, fixture_download, release_id = "fixture-vcv"
+)
+release <- DBI::dbGetQuery(con, "SELECT * FROM clinvar_releases")
+expect_equal(release$source_url, "https://example.test/fixture.xml.gz")
+expect_equal(release$source_md5, "0123456789abcdef0123456789abcdef")
+expect_equal(release$source_bytes, file.info(fixture)$size)
 expect_equal(DBI::dbGetQuery(con, "SELECT count(*) AS n FROM clinvar_variants WHERE vcv_accession = 'STALE'")$n, 0)
 expect_equal(counts[["variants"]], 1)
 expect_equal(counts[["alleles"]], 1)
@@ -142,6 +155,22 @@ expect_equal(
   DBI::dbGetQuery(con, "SELECT count(*) AS n FROM clinvar_policy_allele_decisions")$n,
   1
 )
+gene_summary <- DBI::dbGetQuery(con, "SELECT * FROM clinvar_gene_summaries")
+expect_equal(nrow(gene_summary), 1L)
+expect_equal(gene_summary$symbol, "BRCA1")
+expect_equal(gene_summary$gene_id, 672)
+expect_equal(gene_summary$disease_decision_count, 5)
+expect_equal(gene_summary$pathogenic_disease_decision_count, 5)
+expect_equal(
+  DBI::dbGetQuery(con, "SELECT count(*) AS n FROM clinvar_semantic_documents")$n,
+  counts[["text"]]
+)
+literature <- DBI::dbGetQuery(con, "
+  SELECT source, identifier, literature_url FROM clinvar_literature_links
+  WHERE lower(source) = 'pubmed'
+")
+expect_true(nrow(literature) > 5L)
+expect_true(all(grepl("^https://pubmed.ncbi.nlm.nih.gov/", literature$literature_url)))
 parquet <- tempfile("clinvar-decisions-", fileext = ".parquet")
 exported <- rclinvarbitration_export_clinvarbitration_parquet(
   con, parquet, release_id = "fixture-vcv", assembly = "GRCh38"
@@ -250,6 +279,10 @@ expect_true(any(text$scv_accession == "SCV003995313" & grepl("splice", text$text
 expect_true(any(grepl("condition_name", text$section, fixed = TRUE)))
 expect_true(all(text$text == trimws(text$text)))
 
+expect_error(
+  rclinvarbitration_import_xml(con, fixture, release_id = "fixture-vcv", source_md5 = "bad"),
+  "32-character"
+)
 expect_error(rclinvarbitration_import_xml(con, fixture, release_id = "fixture-vcv"), "already exists")
 replaced <- rclinvarbitration_import_xml(con, fixture, release_id = "fixture-vcv", replace = TRUE)
 expect_equal(replaced[["variants"]], 1)

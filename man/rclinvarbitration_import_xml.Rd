@@ -4,7 +4,14 @@
 \alias{rclinvarbitration_import_xml}
 \title{Stream a ClinVar VCV XML release into relational DuckDB tables}
 \usage{
-rclinvarbitration_import_xml(con, path, release_id, replace = FALSE)
+rclinvarbitration_import_xml(
+  con,
+  path,
+  release_id,
+  replace = FALSE,
+  source_url = NULL,
+  source_md5 = NULL
+)
 }
 \arguments{
 \item{con}{A DuckDB DBI connection.}
@@ -14,6 +21,13 @@ rclinvarbitration_import_xml(con, path, release_id, replace = FALSE)
 \item{release_id}{User-supplied release label stored with every row.}
 
 \item{replace}{Replace rows already stored for \code{release_id}?}
+
+\item{source_url}{Optional source URL for the release catalogue. When \code{path}
+is returned directly by \code{\link[=rclinvarbitration_download_clinvar]{rclinvarbitration_download_clinvar()}}, its download
+metadata supplies this value automatically.}
+
+\item{source_md5}{Optional 32-character source MD5 digest. Download metadata
+is used automatically when available.}
 }
 \value{
 A named numeric vector with imported entity counts.

@@ -4,7 +4,9 @@
 .Rhistory
 .RData
 README.html
-docs/
+docs/*
+!docs/ERRATA.Rmd
+!docs/ERRATA.md
 .webr-local-artifacts/
 node_modules/
 *.tgz

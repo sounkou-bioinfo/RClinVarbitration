@@ -13,6 +13,13 @@ if [ -z "${R_HOME:-}" ]; then
   R_HOME=`R RHOME`
 fi
 
+OS=`uname -s`
+ARCH=`uname -m`
+WINDOWS_BUILD=no
+case "$OS" in
+  MINGW*|MSYS*|CYGWIN*) WINDOWS_BUILD=yes ;;
+esac
+
 VERSION=`awk -F': *' '/^Version:/ {print $2; exit}' "$ROOT/DESCRIPTION"`
 CAPI_ROOT="$ROOT/tools/ext/duckdb_capi"
 VERSIONS_FILE="$CAPI_ROOT/versions.txt"
@@ -27,8 +34,22 @@ for file in "$VERSIONS_FILE" "$SOURCE" "$METADATA"; do
   fi
 done
 
-if ! command -v pkg-config >/dev/null 2>&1 || ! pkg-config --exists libxml-2.0 || ! pkg-config --exists zlib; then
+PKG_CONFIG_CMD="${PKG_CONFIG:-pkg-config}"
+if [ "$WINDOWS_BUILD" = yes ]; then
+  # Rtools ships target-aware pkg-config wrappers and static libxml2/zlib.
+  # Respect BINPREF when R is configured for an explicit cross-tool prefix.
+  BINPREF=`"${R_HOME}/bin/R" CMD config BINPREF 2>/dev/null || true`
+  if [ -n "$BINPREF" ] && command -v "${BINPREF}pkg-config" >/dev/null 2>&1; then
+    PKG_CONFIG_CMD="${BINPREF}pkg-config"
+  fi
+fi
+if ! command -v "$PKG_CONFIG_CMD" >/dev/null 2>&1 || \
+  ! "$PKG_CONFIG_CMD" --exists libxml-2.0 || \
+  ! "$PKG_CONFIG_CMD" --exists zlib; then
   echo "ERROR: RClinVarbitration requires libxml2 and zlib development headers plus pkg-config" >&2
+  if [ "$WINDOWS_BUILD" = yes ]; then
+    echo "Install a current Rtools release, which provides all three dependencies." >&2
+  fi
   exit 1
 fi
 
@@ -62,18 +83,16 @@ R_CFLAGS=`"${R_HOME}/bin/R" CMD config CFLAGS`
 R_CPICFLAGS=`"${R_HOME}/bin/R" CMD config CPICFLAGS`
 R_LDFLAGS=`"${R_HOME}/bin/R" CMD config LDFLAGS`
 CONFIGURE_LDFLAGS="${LDFLAGS:-}"
-XML_CFLAGS=`pkg-config --cflags libxml-2.0`
-XML_LIBS=`pkg-config --libs libxml-2.0`
-ZLIB_CFLAGS=`pkg-config --cflags zlib`
-ZLIB_LIBS=`pkg-config --libs zlib`
+XML_CFLAGS=`"$PKG_CONFIG_CMD" --cflags libxml-2.0`
+XML_LIBS=`"$PKG_CONFIG_CMD" --libs libxml-2.0`
+ZLIB_CFLAGS=`"$PKG_CONFIG_CMD" --cflags zlib`
+ZLIB_LIBS=`"$PKG_CONFIG_CMD" --libs zlib`
 
 WASM_BUILD=no
 if echo "$CC" | grep -q 'emcc\|wasm' || echo "$HOST_TRIPLET" | grep -q 'wasm\|emscripten'; then
   WASM_BUILD=yes
 fi
 
-OS=`uname -s`
-ARCH=`uname -m`
 if [ "$WASM_BUILD" = yes ]; then
   # DuckDB's webR/duckdb-wasm loader accepts Emscripten side modules under
   # this platform identity, matching the Rducks extension contract.
@@ -91,6 +110,7 @@ else
     # rejecting that vendored-header-only diagnostic.
     Darwin/x86_64) PLATFORM=osx_amd64; SHARED_FLAGS='-shared -fPIC -undefined dynamic_lookup -Wl,-exported_symbol,_rclinvarbitration_init_c_api'; EXTRA_CFLAGS='-Wno-error=strict-prototypes' ;;
     Darwin/arm64) PLATFORM=osx_arm64; SHARED_FLAGS='-shared -fPIC -undefined dynamic_lookup -Wl,-exported_symbol,_rclinvarbitration_init_c_api'; EXTRA_CFLAGS='-Wno-error=strict-prototypes' ;;
+    MINGW*/x86_64|MSYS*/x86_64|CYGWIN*/x86_64) PLATFORM=windows_amd64; SHARED_FLAGS='-shared'; EXTRA_CFLAGS='' ;;
     *) echo "ERROR: unsupported DuckDB extension platform: $OS/$ARCH" >&2; exit 1 ;;
   esac
 fi

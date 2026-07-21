@@ -4,12 +4,25 @@ template:
 
 navbar:
   structure:
-    left: [intro, reference, news]
+    left: [intro, articles, reference, errata, news]
     right: [search, github]
+  components:
+    errata:
+      text: Errata
+      href: https://github.com/sounkou-bioinfo/RClinVarbitration/blob/main/docs/ERRATA.md
+
+articles:
+  - title: Concepts and integrations
+    navbar: Concepts and integrations
+    contents:
+      - arbitration-algorithm
+      - storage-cache-and-performance
+      - semantic-ducklake-variantstory
 
 reference:
-  - title: Connection and import
+  - title: Connection, download, and import
     contents:
+      - rclinvarbitration_download_clinvar
       - rclinvarbitration_extension_path
       - rclinvarbitration_enable
       - rclinvarbitration_init

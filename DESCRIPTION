@@ -30,8 +30,9 @@ Suggests:
     rmarkdown,
     roxygen2,
     tinytest
-SystemRequirements: libxml2 (>= 2.9.0), zlib, pkg-config, C compiler
-OS_type: unix
+VignetteBuilder: knitr
+SystemRequirements: libxml2 (>= 2.9.0), zlib, pkg-config, C compiler;
+    Rtools (Windows)
 URL: https://github.com/sounkou-bioinfo/RClinVarbitration,
     https://sounkou-bioinfo.github.io/RClinVarbitration/
 BugReports: https://github.com/sounkou-bioinfo/RClinVarbitration/issues

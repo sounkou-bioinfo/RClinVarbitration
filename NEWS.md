@@ -4,9 +4,20 @@
   exclusions are normalized case-insensitively, combined with a selected named
   profile, and applied without deleting imported source submissions.
 - Replace the full-release executable README with a concise quick start and an
-  explicit comparison with upstream ClinVarbitration. Clarify that native
-  Windows builds remain unsupported while webR uses a separate Emscripten path.
-
+  explicit comparison with upstream ClinVarbitration.
+- Add native x86-64 Windows extension builds using Rtools-provided libxml2,
+  zlib, and target-aware `pkg-config`; retain Linux, macOS, and webR builds.
+- Add `rclinvarbitration_download_clinvar()` for checksum-validated current or
+  monthly archived VCV XML downloads and optional flat-file validation inputs.
+  Download URL, digest, and source byte size can flow into the release catalogue.
+- Add `clinvar_hpo_terms`, `clinvar_literature_links`,
+  `clinvar_semantic_documents`, and disease-aware `clinvar_gene_summaries` for
+  semantic retrieval, gene panels, literature review, DuckLake publication,
+  and VariantStory integration.
+- Add pkgdown vignettes for the complete arbitration algorithm, storage/cache
+  lifecycle and measured full-release performance, and semantic/DuckLake/
+  VariantStory integration. Add a rendered `docs/ERRATA.md` audit of intentional
+  deviations and observed XML/flat/upstream differentials.
 - Add experimental webR/WebAssembly support. The package now builds its
   version-matched DuckDB extension as an Emscripten side module and has a
   browser smoke test that loads it and imports the compressed VCV fixture.
