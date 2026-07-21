@@ -60,6 +60,8 @@ done
 CC=`"${R_HOME}/bin/R" CMD config CC | cut -f1 -d' '`
 R_CFLAGS=`"${R_HOME}/bin/R" CMD config CFLAGS`
 R_CPICFLAGS=`"${R_HOME}/bin/R" CMD config CPICFLAGS`
+R_LDFLAGS=`"${R_HOME}/bin/R" CMD config LDFLAGS`
+CONFIGURE_LDFLAGS="${LDFLAGS:-}"
 XML_CFLAGS=`pkg-config --cflags libxml-2.0`
 XML_LIBS=`pkg-config --libs libxml-2.0`
 
@@ -110,7 +112,8 @@ for DUCKDB_VERSION in $BUILD_VERSIONS; do
   mkdir -p "$OUT_DIR"
 
   echo "Building RClinVarbitration extension for DuckDB $DUCKDB_VERSION..."
-  "$CC" $SHARED_FLAGS $CFLAGS $CPPFLAGS -o "$RAW" $EXT_EXPORT_FLAGS "$SOURCE" $XML_LIBS
+  "$CC" $SHARED_FLAGS $CFLAGS $CPPFLAGS $R_LDFLAGS $CONFIGURE_LDFLAGS \
+    -o "$RAW" $EXT_EXPORT_FLAGS "$SOURCE" $XML_LIBS
   "${R_HOME}/bin/Rscript" "$METADATA" \
     --library-file "$RAW" \
     --out-file "$FINAL" \
