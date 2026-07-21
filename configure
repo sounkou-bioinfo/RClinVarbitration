@@ -2,6 +2,13 @@
 set -eu
 
 ROOT=`CDPATH= cd -- "$(dirname -- "$0")" && pwd`
+HOST_TRIPLET=""
+for arg in "$@"; do
+  case "$arg" in
+    --host=*) HOST_TRIPLET="${arg#--host=}" ;;
+  esac
+done
+
 if [ -z "${R_HOME:-}" ]; then
   R_HOME=`R RHOME`
 fi
@@ -56,22 +63,43 @@ R_CPICFLAGS=`"${R_HOME}/bin/R" CMD config CPICFLAGS`
 XML_CFLAGS=`pkg-config --cflags libxml-2.0`
 XML_LIBS=`pkg-config --libs libxml-2.0`
 
+WASM_BUILD=no
+if echo "$CC" | grep -q 'emcc\|wasm' || echo "$HOST_TRIPLET" | grep -q 'wasm\|emscripten'; then
+  WASM_BUILD=yes
+fi
+
 OS=`uname -s`
 ARCH=`uname -m`
-case "$OS/$ARCH" in
-  Linux/x86_64) PLATFORM=linux_amd64; SHARED_FLAGS='-shared -fPIC -Wl,--exclude-libs,ALL -Wl,-Bsymbolic-functions'; EXTRA_CFLAGS='' ;;
-  Linux/aarch64|Linux/arm64) PLATFORM=linux_arm64; SHARED_FLAGS='-shared -fPIC -Wl,--exclude-libs,ALL -Wl,-Bsymbolic-functions'; EXTRA_CFLAGS='' ;;
-  # DuckDB's exact v1.5 headers retain legacy empty-prototype declarations.
-  # Keep -Werror for package code while preventing current Apple Clang from
-  # rejecting that vendored-header-only diagnostic.
-  Darwin/x86_64) PLATFORM=osx_amd64; SHARED_FLAGS='-shared -fPIC -undefined dynamic_lookup -Wl,-exported_symbol,_rclinvarbitration_init_c_api'; EXTRA_CFLAGS='-Wno-error=strict-prototypes' ;;
-  Darwin/arm64) PLATFORM=osx_arm64; SHARED_FLAGS='-shared -fPIC -undefined dynamic_lookup -Wl,-exported_symbol,_rclinvarbitration_init_c_api'; EXTRA_CFLAGS='-Wno-error=strict-prototypes' ;;
-  *) echo "ERROR: unsupported DuckDB extension platform: $OS/$ARCH" >&2; exit 1 ;;
-esac
+if [ "$WASM_BUILD" = yes ]; then
+  # DuckDB's webR/duckdb-wasm loader accepts Emscripten side modules under
+  # this platform identity, matching the Rducks extension contract.
+  PLATFORM=linux_i686_musl
+  SHARED_FLAGS='-shared -fPIC'
+  EXTRA_CFLAGS=''
+  EXT_EXPORT_FLAGS='-Wl,--export=rclinvarbitration_init_c_api'
+else
+  EXT_EXPORT_FLAGS=''
+  case "$OS/$ARCH" in
+    Linux/x86_64) PLATFORM=linux_amd64; SHARED_FLAGS='-shared -fPIC -Wl,--exclude-libs,ALL -Wl,-Bsymbolic-functions'; EXTRA_CFLAGS='' ;;
+    Linux/aarch64|Linux/arm64) PLATFORM=linux_arm64; SHARED_FLAGS='-shared -fPIC -Wl,--exclude-libs,ALL -Wl,-Bsymbolic-functions'; EXTRA_CFLAGS='' ;;
+    # DuckDB's exact v1.5 headers retain legacy empty-prototype declarations.
+    # Keep -Werror for package code while preventing current Apple Clang from
+    # rejecting that vendored-header-only diagnostic.
+    Darwin/x86_64) PLATFORM=osx_amd64; SHARED_FLAGS='-shared -fPIC -undefined dynamic_lookup -Wl,-exported_symbol,_rclinvarbitration_init_c_api'; EXTRA_CFLAGS='-Wno-error=strict-prototypes' ;;
+    Darwin/arm64) PLATFORM=osx_arm64; SHARED_FLAGS='-shared -fPIC -undefined dynamic_lookup -Wl,-exported_symbol,_rclinvarbitration_init_c_api'; EXTRA_CFLAGS='-Wno-error=strict-prototypes' ;;
+    *) echo "ERROR: unsupported DuckDB extension platform: $OS/$ARCH" >&2; exit 1 ;;
+  esac
+fi
 
 rm -rf "$BUILD_ROOT"
 mkdir -p "$BUILD_ROOT"
-CFLAGS="$R_CFLAGS $R_CPICFLAGS -O2 -fPIC -fvisibility=hidden -Wall -Wextra -Werror $EXTRA_CFLAGS"
+if [ "$WASM_BUILD" = yes ]; then
+  # A side module exports only explicitly listed symbols. Do not pass host R
+  # linker flags or native symbol-hiding flags into the Emscripten link.
+  CFLAGS="$R_CFLAGS $R_CPICFLAGS -O2 -fPIC $EXTRA_CFLAGS"
+else
+  CFLAGS="$R_CFLAGS $R_CPICFLAGS -O2 -fPIC -fvisibility=hidden -Wall -Wextra -Werror $EXTRA_CFLAGS"
+fi
 
 for DUCKDB_VERSION in $BUILD_VERSIONS; do
   HEADER_DIR="$CAPI_ROOT/$DUCKDB_VERSION"
@@ -82,7 +110,7 @@ for DUCKDB_VERSION in $BUILD_VERSIONS; do
   mkdir -p "$OUT_DIR"
 
   echo "Building RClinVarbitration extension for DuckDB $DUCKDB_VERSION..."
-  "$CC" $SHARED_FLAGS $CFLAGS $CPPFLAGS -o "$RAW" "$SOURCE" $XML_LIBS
+  "$CC" $SHARED_FLAGS $CFLAGS $CPPFLAGS -o "$RAW" $EXT_EXPORT_FLAGS "$SOURCE" $XML_LIBS
   "${R_HOME}/bin/Rscript" "$METADATA" \
     --library-file "$RAW" \
     --out-file "$FINAL" \
